@@ -15,24 +15,16 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #020617; /* slate-950 */
-            color: #cbd5e1; /* slate-300 */
+            background-color: #020617;
+            color: #cbd5e1;
             margin: 0;
             padding: 0;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent;
         }
-
         .custom-scrollbar::-webkit-scrollbar { width: 0px; height: 0px; }
-        
-        .animate-fade-in {
-            animation: fadeIn 0.3s ease-in-out;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
     </style>
 </head>
@@ -42,12 +34,11 @@
     <!-- FIREBASE SDK (BACKEND ENGINE) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
 
         // =========================================================================
-        // KONFIGURASI GOOGLE FIREBASE KREANOVA AI (REAL DATABASE)
+        // KONFIGURASI GOOGLE FIREBASE KREANOVA AI
         // =========================================================================
         const firebaseConfig = {
             apiKey: "AIzaSyCWpjChuqzjUe4_foM2gCS4_XoCQE33lHk",
@@ -60,23 +51,21 @@
         };
         // =========================================================================
 
-        let app, auth, db, analytics;
+        let app, auth, db;
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
-            analytics = getAnalytics(app);
             console.log("Firebase Terhubung Sukses!");
         } catch (error) {
             console.error("Gagal menghubungkan Firebase:", error);
         }
 
-        window.KreaNovaBackend = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, doc, setDoc, getDoc };
+        window.KreaNovaBackend = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, doc, setDoc, getDoc, collection, query, where, getDocs };
     </script>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
-
         const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
 
         const KreaNovaLogo = ({ className = "w-8 h-8", opacity = "1" }) => (
@@ -104,55 +93,33 @@
             </svg>
         );
 
-        // DATA KOSONG (Menunggu Database Asli)
-        const EMPTY_USER = {
-            name: "-", userId: "-", referralCode: "-",
-            phone: "-", email: "-", bank: { name: "-", accNumber: "-", accName: "-" }
-        };
-        const EMPTY_WALLET = { available: 0, sponsorBonus: 0, pairingBonus: 0 };
-        const EMPTY_TREE = null; 
-
         const MemberDashboard = ({ user, wallet }) => {
             const [copied, setCopied] = useState(false);
-            
-            const safeUser = user || EMPTY_USER;
-            const safeWallet = wallet || EMPTY_WALLET;
-            
-            // Format link referral menggunakan URL asal Vercel Anda saat ini
+            const safeUser = user || { name: "-", userId: "-", referralCode: "-" };
+            const safeWallet = wallet || { available: 0 };
             const domain = window.location.hostname;
             const fullLink = `https://${domain}?ref=${safeUser.referralCode}`;
 
             const handleCopy = () => {
-                const textArea = document.createElement("textarea");
-                textArea.value = fullLink;
-                textArea.style.position = "fixed"; 
-                textArea.style.left = "-9999px";
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
+                navigator.clipboard.writeText(fullLink).then(() => {
                     setCopied(true);
-                    setTimeout(() => setCopied(false), 2000); 
-                } catch (err) {
-                    console.error('Gagal menyalin', err);
-                }
-                document.body.removeChild(textArea);
+                    setTimeout(() => setCopied(false), 2000);
+                }).catch(() => {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = fullLink;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                });
             };
 
             const handleShare = () => {
                 const text = `Halo! Bergabunglah dengan KreaNova AI dan ciptakan konten video menggunakan kecerdasan buatan. Daftar melalui link saya: ${fullLink}`;
-                
                 if (navigator.share) {
-                    navigator.share({
-                        title: 'Undangan KreaNova AI',
-                        text: text,
-                        url: fullLink,
-                    }).catch((err) => {
-                        // Abaikan error "Share canceled" jika user batal membagikan
-                        if (err.name !== 'AbortError') {
-                            console.error('Gagal membagikan', err);
-                        }
-                    });
+                    navigator.share({ title: 'Undangan KreaNova AI', text: text, url: fullLink }).catch(err => console.log('Share dibatalkan'));
                 } else {
                     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
                 }
@@ -197,62 +164,48 @@
                             <p className="text-blue-400 text-xs text-center font-mono break-all">{fullLink}</p>
                         </div>
                         <div className="flex gap-3">
-                            <button 
-                                onClick={handleCopy}
-                                className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm ${
-                                    copied 
-                                    ? 'bg-emerald-600 text-white' 
-                                    : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
-                                }`}
-                            >
+                            <button onClick={handleCopy} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm ${copied ? 'bg-emerald-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'}`}>
                                 <i className={`fas ${copied ? 'fa-check' : 'fa-copy'}`}></i> {copied ? 'Tersalin!' : 'Copy Link'}
                             </button>
-                            <button 
-                                onClick={handleShare}
-                                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(5,150,105,0.3)] flex items-center justify-center gap-2"
-                            >
+                            <button onClick={handleShare} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(5,150,105,0.3)] flex items-center justify-center gap-2">
                                 <i className="fab fa-whatsapp text-sm"></i> Bagikan
                             </button>
                         </div>
-                        <p className="text-[9px] text-slate-500 text-center mt-3">Bagikan link ini dan dapatkan bonus sponsor Rp 40.000 untuk setiap pendaftaran baru yang aktif.</p>
                     </div>
                 </div>
             );
         };
 
-        const BinaryTreeVisualizer = () => {
-            return (
-                <div className="animate-fade-in pb-20">
-                    <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 mb-4 flex justify-between items-center shadow-md">
-                        <div>
-                            <h2 className="text-white font-bold text-sm tracking-wide">Pohon Jaringan</h2>
-                            <p className="text-[10px] text-slate-400">Total Kiri: 0 | Kanan: 0</p>
-                        </div>
-                        <div className="bg-slate-800 p-2 rounded-lg">
-                            <i className="fas fa-sitemap text-blue-400"></i>
-                        </div>
+        const BinaryTreeVisualizer = ({ user }) => (
+            <div className="animate-fade-in pb-20">
+                <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 mb-4 flex justify-between items-center shadow-md">
+                    <div>
+                        <h2 className="text-white font-bold text-sm tracking-wide">Pohon Jaringan</h2>
+                        <p className="text-[10px] text-slate-400">Pusat Jaringan Anda</p>
                     </div>
-                    
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-x-auto custom-scrollbar relative min-h-[400px]">
-                        <div className="flex flex-col items-center min-w-[500px] pt-4 relative z-10">
-                            {/* ROOT NODE (KOSONG) */}
-                            <div className="flex flex-col items-center relative">
-                                <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-slate-600 shadow-[0_0_15px_rgba(212,175,55,0.4)] flex items-center justify-center relative z-10">
-                                    <KreaNovaLogo className="w-12 h-12" opacity="0.5" />
-                                </div>
-                                <div className="mt-2 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg text-center z-10 w-28">
-                                    <p className="text-[10px] font-bold text-white truncate">Belum Ada Data</p>
-                                    <p className="text-[8px] text-blue-400 font-mono mt-0.5">-</p>
-                                    <div className="flex justify-between text-[8px] mt-1 pt-1 border-t border-slate-800 text-slate-400">
-                                        <span>0 L</span><span>0 R</span>
-                                    </div>
+                    <div className="bg-slate-800 p-2 rounded-lg">
+                        <i className="fas fa-sitemap text-blue-400"></i>
+                    </div>
+                </div>
+                
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-x-auto custom-scrollbar relative min-h-[400px]">
+                    <div className="flex flex-col items-center min-w-[500px] pt-4 relative z-10">
+                        <div className="flex flex-col items-center relative">
+                            <div className="w-20 h-20 rounded-full border-[3px] border-[#d4af37] shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center bg-slate-900 relative z-10">
+                                <KreaNovaLogo className="w-16 h-16"/>
+                            </div>
+                            <div className="mt-2 bg-slate-950 border border-[#d4af37]/50 px-4 py-2 rounded-xl text-center z-10 w-36 shadow-lg">
+                                <p className="text-xs font-bold text-white truncate">{user ? user.name : "Member"}</p>
+                                <p className="text-[9px] text-[#d4af37] font-mono mt-0.5">{user ? user.userId : "-"}</p>
+                                <div className="flex justify-between text-[9px] mt-1.5 pt-1.5 border-t border-slate-800 text-slate-400 font-medium">
+                                    <span>0 KIRI</span><span>0 KANAN</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            );
-        };
+            </div>
+        );
 
         const MemberAiStudio = () => {
             const [products, setProducts] = useState([]);
@@ -275,9 +228,7 @@
                 
                 if (saved) {
                     let parsedSaved = JSON.parse(saved);
-                    if (parsedSaved.length > 0 && parsedSaved[0].id !== 'tutorial') {
-                        parsedSaved.unshift(defaultProducts[0]);
-                    }
+                    if (parsedSaved.length > 0 && parsedSaved[0].id !== 'tutorial') parsedSaved.unshift(defaultProducts[0]);
                     setProducts(parsedSaved);
                 } else {
                     setProducts(defaultProducts);
@@ -293,24 +244,7 @@
 
                     <div className="grid grid-cols-2 gap-3">
                         {products.map((prod) => (
-                            <a 
-                                key={prod.id}
-                                href={prod.active && prod.url ? prod.url : '#'} 
-                                target={prod.active && prod.url ? "_blank" : "_self"}
-                                className={`block p-4 rounded-2xl border transition-all ${
-                                    prod.id === 'tutorial' ? 'col-span-2' : ''
-                                } ${
-                                    prod.active 
-                                    ? 'bg-slate-900 border-slate-700 hover:border-blue-500/50 shadow-md active:scale-95' 
-                                    : 'bg-slate-900/50 border-slate-800 opacity-60 cursor-not-allowed'
-                                }`}
-                                onClick={(e) => {
-                                    if(!prod.active || !prod.url) {
-                                        e.preventDefault();
-                                        if(prod.active && !prod.url) alert("Admin belum memasukkan link untuk menu ini.");
-                                    }
-                                }}
-                            >
+                            <a key={prod.id} href={prod.active && prod.url ? prod.url : '#'} target={prod.active && prod.url ? "_blank" : "_self"} className={`block p-4 rounded-2xl border transition-all ${prod.id === 'tutorial' ? 'col-span-2' : ''} ${prod.active ? 'bg-slate-900 border-slate-700 hover:border-blue-500/50 shadow-md active:scale-95' : 'bg-slate-900/50 border-slate-800 opacity-60 cursor-not-allowed'}`} onClick={(e) => { if(!prod.active || !prod.url) { e.preventDefault(); if(prod.active && !prod.url) alert("Admin belum memasukkan link untuk menu ini."); } }}>
                                 <div className={`w-10 h-10 rounded-xl mb-3 flex items-center justify-center bg-gradient-to-br ${prod.color} shadow-lg ${prod.id === 'tutorial' ? 'w-12 h-12 shadow-red-500/30' : ''}`}>
                                     <i className={`${prod.icon === 'fa-youtube' ? 'fab' : 'fas'} ${prod.icon} text-white ${prod.id === 'tutorial' ? 'text-xl' : ''}`}></i>
                                 </div>
@@ -323,34 +257,24 @@
             );
         };
 
-        const MemberProfile = ({ user, onLogout }) => {
-            const safeUser = user || EMPTY_USER;
-            return (
-                <div className="animate-fade-in pb-20 space-y-4">
-                    <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 flex flex-col items-center shadow-md">
-                        <div className="relative mb-3">
-                            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-3xl border-4 border-slate-950 shadow-lg">
-                                {safeUser.name !== "-" ? safeUser.name.charAt(0) : "?"}
-                            </div>
-                            <button className="absolute bottom-0 right-0 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white border-2 border-slate-900 shadow-sm">
-                                <i className="fas fa-camera text-[10px]"></i>
-                            </button>
-                        </div>
-                        <h2 className="text-lg font-bold text-white">{safeUser.name}</h2>
-                        <p className="text-xs text-blue-400 font-mono mb-2">{safeUser.userId}</p>
-                        <span className="bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-1 rounded-full text-[10px] font-bold tracking-wider">MEMBER AKTIF</span>
+        const MemberProfile = ({ user, onLogout }) => (
+            <div className="animate-fade-in pb-20 space-y-4">
+                <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 flex flex-col items-center shadow-md">
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-3xl border-4 border-slate-950 shadow-lg mb-3">
+                        {user && user.name ? user.name.charAt(0) : "?"}
                     </div>
-
-                    <button onClick={onLogout} className="w-full bg-slate-900 border border-slate-800 hover:bg-red-900/20 text-red-400 py-3.5 rounded-2xl text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-sm">
-                        <i className="fas fa-sign-out-alt"></i> Keluar Akun
-                    </button>
+                    <h2 className="text-lg font-bold text-white">{user ? user.name : "-"}</h2>
+                    <p className="text-xs text-blue-400 font-mono mb-2">{user ? user.userId : "-"}</p>
+                    <span className="bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-1 rounded-full text-[10px] font-bold tracking-wider">MEMBER AKTIF</span>
                 </div>
-            );
-        };
+                <button onClick={onLogout} className="w-full bg-slate-900 border border-slate-800 hover:bg-red-900/20 text-red-400 py-3.5 rounded-2xl text-sm font-bold transition-colors flex items-center justify-center gap-2 shadow-sm">
+                    <i className="fas fa-sign-out-alt"></i> Keluar Akun
+                </button>
+            </div>
+        );
 
-        const MemberApp = ({ onLogout, userData, walletData }) => {
+        const MemberApp = ({ onLogout, userData }) => {
             const [activeMenu, setActiveMenu] = useState('dashboard');
-
             return (
                 <div className="h-screen w-full bg-slate-950 flex flex-col font-sans text-slate-300 relative overflow-hidden">
                     <header className="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 shrink-0 z-20 shadow-md">
@@ -361,88 +285,50 @@
                                 <p className="text-[8px] text-[#d4af37] font-medium tracking-widest uppercase">Solusi Teknologi Cerdas</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <button className="text-slate-400 hover:text-white relative">
-                                <i className="fas fa-bell"></i>
-                                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                            </button>
-                        </div>
                     </header>
-
                     <main className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/50 to-slate-950">
                         <div className="max-w-md mx-auto">
-                            {activeMenu === 'dashboard' && <MemberDashboard user={userData} wallet={walletData} />}
-                            {activeMenu === 'network' && <BinaryTreeVisualizer />}
+                            {activeMenu === 'dashboard' && <MemberDashboard user={userData} wallet={userData?.wallet} />}
+                            {activeMenu === 'network' && <BinaryTreeVisualizer user={userData} />}
                             {activeMenu === 'ai' && <MemberAiStudio />}
                             {activeMenu === 'profile' && <MemberProfile user={userData} onLogout={onLogout} />}
                         </div>
                     </main>
-
-                    <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 pb-safe z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.3)]">
+                    <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 pb-safe z-40">
                         <div className="flex justify-around items-center h-16 max-w-md mx-auto px-2">
-                            <button onClick={() => setActiveMenu('dashboard')} className="flex flex-col items-center justify-center w-full h-full gap-1 relative">
-                                <i className={`fas fa-home text-lg transition-colors ${activeMenu === 'dashboard' ? 'text-blue-500' : 'text-slate-500'}`}></i>
-                                <span className={`text-[9px] font-bold transition-colors ${activeMenu === 'dashboard' ? 'text-blue-400' : 'text-slate-500'}`}>Home</span>
-                            </button>
-                            <button onClick={() => setActiveMenu('network')} className="flex flex-col items-center justify-center w-full h-full gap-1">
-                                <i className={`fas fa-network-wired text-lg transition-colors ${activeMenu === 'network' ? 'text-blue-500' : 'text-slate-500'}`}></i>
-                                <span className={`text-[9px] font-bold transition-colors ${activeMenu === 'network' ? 'text-blue-400' : 'text-slate-500'}`}>Jaringan</span>
-                            </button>
-                            <button onClick={() => setActiveMenu('ai')} className="flex flex-col items-center justify-center w-full h-full gap-1">
-                                <i className={`fas fa-sparkles text-lg transition-colors ${activeMenu === 'ai' ? 'text-blue-500' : 'text-slate-500'}`}></i>
-                                <span className={`text-[9px] font-bold transition-colors ${activeMenu === 'ai' ? 'text-blue-400' : 'text-slate-500'}`}>AI Video</span>
-                            </button>
-                            <button onClick={() => setActiveMenu('profile')} className="flex flex-col items-center justify-center w-full h-full gap-1">
-                                <i className={`fas fa-user text-lg transition-colors ${activeMenu === 'profile' ? 'text-blue-500' : 'text-slate-500'}`}></i>
-                                <span className={`text-[9px] font-bold transition-colors ${activeMenu === 'profile' ? 'text-blue-400' : 'text-slate-500'}`}>Profil</span>
-                            </button>
+                            <button onClick={() => setActiveMenu('dashboard')} className="flex flex-col items-center justify-center w-full h-full gap-1"><i className={`fas fa-home text-lg ${activeMenu === 'dashboard' ? 'text-blue-500' : 'text-slate-500'}`}></i><span className={`text-[9px] font-bold ${activeMenu === 'dashboard' ? 'text-blue-400' : 'text-slate-500'}`}>Home</span></button>
+                            <button onClick={() => setActiveMenu('network')} className="flex flex-col items-center justify-center w-full h-full gap-1"><i className={`fas fa-network-wired text-lg ${activeMenu === 'network' ? 'text-blue-500' : 'text-slate-500'}`}></i><span className={`text-[9px] font-bold ${activeMenu === 'network' ? 'text-blue-400' : 'text-slate-500'}`}>Jaringan</span></button>
+                            <button onClick={() => setActiveMenu('ai')} className="flex flex-col items-center justify-center w-full h-full gap-1"><i className={`fas fa-sparkles text-lg ${activeMenu === 'ai' ? 'text-blue-500' : 'text-slate-500'}`}></i><span className={`text-[9px] font-bold ${activeMenu === 'ai' ? 'text-blue-400' : 'text-slate-500'}`}>AI Video</span></button>
+                            <button onClick={() => setActiveMenu('profile')} className="flex flex-col items-center justify-center w-full h-full gap-1"><i className={`fas fa-user text-lg ${activeMenu === 'profile' ? 'text-blue-500' : 'text-slate-500'}`}></i><span className={`text-[9px] font-bold ${activeMenu === 'profile' ? 'text-blue-400' : 'text-slate-500'}`}>Profil</span></button>
                         </div>
                     </nav>
                 </div>
             );
         };
 
-        const PaymentInstructionPage = ({ nominal, onRefresh, onLogout }) => {
-            return (
-                <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-950 p-6 relative overflow-y-auto max-w-md mx-auto shadow-2xl">
-                    <div className="w-full z-10 animate-fade-in py-8">
-                        <div className="flex flex-col items-center mb-6">
-                            <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mb-3">
-                                <i className="fas fa-clock text-3xl text-orange-500"></i>
-                            </div>
-                            <h2 className="text-xl font-bold text-white text-center">Menunggu Pembayaran</h2>
-                            <p className="text-xs text-slate-400 text-center mt-2 max-w-[250px]">Selesaikan pembayaran Anda agar akun segera aktif.</p>
+        const PaymentInstructionPage = ({ nominal, onLogout }) => (
+            <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-950 p-6 relative overflow-y-auto max-w-md mx-auto shadow-2xl">
+                <div className="w-full z-10 animate-fade-in py-8">
+                    <div className="flex flex-col items-center mb-6">
+                        <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mb-3">
+                            <i className="fas fa-clock text-3xl text-orange-500"></i>
                         </div>
-
-                        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl w-full mb-6">
-                            <p className="text-[10px] text-slate-500 text-center uppercase tracking-widest font-bold mb-2">Total Tagihan (Sertakan Kode Unik)</p>
-                            <h1 className="text-3xl font-black text-emerald-400 text-center mb-6">{formatIDR(nominal)}</h1>
-                            
-                            <div className="space-y-4">
-                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                                    <p className="text-[10px] text-slate-500 mb-1">Transfer Ke Bank BCA</p>
-                                    <p className="text-lg font-bold text-white tracking-widest">873 123 4567</p>
-                                    <p className="text-xs text-slate-400 mt-1">A.N. PT KreaNova AI Indonesia</p>
-                                </div>
-                            </div>
-
-                            <p className="text-[10px] text-orange-400 text-center mt-6 p-3 bg-orange-500/10 rounded-xl border border-orange-500/20">
-                                <i className="fas fa-exclamation-triangle mr-1"></i> Penting: Transfer TEPAT sesuai nominal hingga 3 digit terakhir agar sistem/admin dapat mengenali pembayaran Anda secara instan.
-                            </p>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button onClick={onRefresh} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl text-xs transition-all shadow-lg flex justify-center items-center gap-2">
-                                <i className="fas fa-sync-alt"></i> Cek Status
-                            </button>
-                            <button onClick={onLogout} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl text-xs transition-all border border-slate-700">
-                                Keluar Sementara
-                            </button>
+                        <h2 className="text-xl font-bold text-white text-center">Menunggu Pembayaran</h2>
+                        <p className="text-xs text-slate-400 text-center mt-2">Selesaikan pembayaran agar akun Anda aktif.</p>
+                    </div>
+                    <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl w-full mb-6">
+                        <p className="text-[10px] text-slate-500 text-center uppercase tracking-widest font-bold mb-2">Total Tagihan (Sertakan Kode Unik)</p>
+                        <h1 className="text-3xl font-black text-emerald-400 text-center mb-6">{formatIDR(nominal)}</h1>
+                        <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                            <p className="text-[10px] text-slate-500 mb-1">Transfer Ke Bank BCA</p>
+                            <p className="text-lg font-bold text-white tracking-widest">873 123 4567</p>
+                            <p className="text-xs text-slate-400 mt-1">A.N. PT KreaNova AI Indonesia</p>
                         </div>
                     </div>
+                    <button onClick={onLogout} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl text-xs transition-all border border-slate-700">Keluar / Cek Nanti</button>
                 </div>
-            );
-        };
+            </div>
+        );
 
         const RegisterPage = ({ onRegisterSuccess, onBackToLogin, initialReferralCode }) => {
             const [isLoading, setIsLoading] = useState(false);
@@ -453,26 +339,54 @@
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                setIsLoading(true);
-                setErrorMsg('');
-                
-                if (!window.KreaNovaBackend || !window.KreaNovaBackend.auth) {
-                    setErrorMsg("Sistem Database belum terhubung. Silakan konfigurasi Firebase.");
-                    setIsLoading(false);
-                    return;
+                setIsLoading(true); setErrorMsg('');
+
+                if (!window.KreaNovaBackend) {
+                    setErrorMsg("Sistem gagal memuat Firebase."); setIsLoading(false); return;
                 }
 
                 try {
-                    // Simulasi Pendaftaran sukses untuk uji coba
-                    const uniqueCode = Math.floor(Math.random() * 900) + 100; 
-                    const totalTransfer = 150000 + uniqueCode;
+                    const { auth, db, createUserWithEmailAndPassword, collection, query, where, getDocs, doc, setDoc } = window.KreaNovaBackend;
                     
-                    setTimeout(() => {
-                        setIsLoading(false);
-                        onRegisterSuccess(totalTransfer);
-                    }, 1500);
+                    // 1. Validasi Kode Sponsor (Kecuali Master Code)
+                    if (refCode !== "KREANOVA") {
+                        const q = query(collection(db, "users"), where("referralCode", "==", refCode));
+                        const querySnapshot = await getDocs(q);
+                        if (querySnapshot.empty) {
+                            throw new Error("Kode Sponsor tidak ditemukan! Gunakan 'KREANOVA' untuk akun pertama.");
+                        }
+                    }
+
+                    // 2. Buat Akun Auth
+                    const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+                    const user = userCredential.user;
+
+                    // 3. Generate ID & Tagihan Unik
+                    const uniqueCode = Math.floor(Math.random() * 900) + 100;
+                    const totalTransfer = 150000 + uniqueCode;
+                    const generatedUserId = "KN" + Math.floor(100000 + Math.random() * 900000);
+                    const generatedRefCode = "REF" + Math.floor(10000 + Math.random() * 90000);
+
+                    // 4. Simpan ke Firestore Database
+                    await setDoc(doc(db, "users", user.uid), {
+                        uid: user.uid,
+                        userId: generatedUserId,
+                        referralCode: generatedRefCode,
+                        name: formData.name,
+                        email: formData.email,
+                        phone: formData.phone,
+                        sponsor: refCode,
+                        position: formData.position,
+                        status: "PENDING",
+                        billAmount: totalTransfer,
+                        wallet: { available: 0, sponsorBonus: 0, pairingBonus: 0 },
+                        createdAt: new Date().toISOString()
+                    });
+
+                    setIsLoading(false);
+                    onRegisterSuccess(totalTransfer);
                 } catch (error) {
-                    setErrorMsg(error.message);
+                    setErrorMsg(error.message.replace("Firebase: ", ""));
                     setIsLoading(false);
                 }
             };
@@ -483,10 +397,8 @@
                         <div className="flex flex-col items-center mb-6">
                             <KreaNovaLogo className="w-16 h-16 mb-4" />
                             <h2 className="text-xl font-bold text-white">Buat Akun Baru</h2>
-                            <p className="text-xs text-slate-400 mt-1">Lengkapi data untuk bergabung dengan KreaNova AI</p>
                         </div>
-
-                        <div className="bg-slate-900/80 backdrop-blur-xl p-6 rounded-3xl border border-slate-800 shadow-xl">
+                        <div className="bg-slate-900/80 p-6 rounded-3xl border border-slate-800 shadow-xl">
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 {errorMsg && <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-xl text-center">{errorMsg}</div>}
                                 
@@ -494,32 +406,15 @@
                                     <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1 uppercase">Sponsor Anda</label>
                                     <div className="relative">
                                         <i className="fas fa-users absolute left-4 top-3 text-slate-500 text-sm"></i>
-                                        <input 
-                                            type="text" 
-                                            required 
-                                            value={refCode}
-                                            onChange={e => setRefCode(e.target.value)}
-                                            disabled={isLocked}
-                                            className={`w-full border text-sm rounded-xl pl-10 pr-10 py-3 focus:outline-none transition-colors ${
-                                                isLocked 
-                                                ? 'bg-blue-900/20 border-blue-500/30 text-blue-400 font-bold' 
-                                                : 'bg-slate-950 border-slate-800 text-white focus:border-blue-500'
-                                            }`} 
-                                            placeholder="Kode Sponsor" 
-                                        />
-                                        {isLocked && <i className="fas fa-lock absolute right-4 top-3.5 text-emerald-500 text-xs" title="Dikunci dari Link"></i>}
+                                        <input type="text" required value={refCode} onChange={e => setRefCode(e.target.value.toUpperCase())} disabled={isLocked} className={`w-full border text-sm rounded-xl pl-10 pr-10 py-3 focus:outline-none transition-colors uppercase ${isLocked ? 'bg-blue-900/20 border-blue-500/30 text-blue-400 font-bold' : 'bg-slate-950 border-slate-800 text-white focus:border-blue-500'}`} placeholder="KREANOVA (Untuk Akun Master)" />
+                                        {isLocked && <i className="fas fa-lock absolute right-4 top-3.5 text-emerald-500 text-xs"></i>}
                                     </div>
+                                    {!isLocked && <p className="text-[9px] text-slate-500 mt-1 ml-1">Ketik <strong className="text-blue-400">KREANOVA</strong> jika Anda pendaftar pertama.</p>}
                                 </div>
 
                                 <div className="flex gap-3">
-                                    <label className={`flex-1 flex flex-col items-center p-3 rounded-xl border cursor-pointer transition-colors ${formData.position === 'LEFT' ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                                        <input type="radio" name="pos" className="hidden" checked={formData.position === 'LEFT'} onChange={() => setFormData({...formData, position: 'LEFT'})} />
-                                        <i className="fas fa-arrow-left mb-1"></i><span className="text-[10px] font-bold">KIRI</span>
-                                    </label>
-                                    <label className={`flex-1 flex flex-col items-center p-3 rounded-xl border cursor-pointer transition-colors ${formData.position === 'RIGHT' ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                                        <input type="radio" name="pos" className="hidden" checked={formData.position === 'RIGHT'} onChange={() => setFormData({...formData, position: 'RIGHT'})} />
-                                        <i className="fas fa-arrow-right mb-1"></i><span className="text-[10px] font-bold">KANAN</span>
-                                    </label>
+                                    <label className={`flex-1 flex flex-col items-center p-3 rounded-xl border cursor-pointer transition-colors ${formData.position === 'LEFT' ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500'}`}><input type="radio" name="pos" className="hidden" checked={formData.position === 'LEFT'} onChange={() => setFormData({...formData, position: 'LEFT'})} /><i className="fas fa-arrow-left mb-1"></i><span className="text-[10px] font-bold">KIRI</span></label>
+                                    <label className={`flex-1 flex flex-col items-center p-3 rounded-xl border cursor-pointer transition-colors ${formData.position === 'RIGHT' ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500'}`}><input type="radio" name="pos" className="hidden" checked={formData.position === 'RIGHT'} onChange={() => setFormData({...formData, position: 'RIGHT'})} /><i className="fas fa-arrow-right mb-1"></i><span className="text-[10px] font-bold">KANAN</span></label>
                                 </div>
 
                                 <div><label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1 uppercase">Nama Lengkap</label><div className="relative"><i className="fas fa-id-card absolute left-4 top-3 text-slate-500 text-sm"></i><input type="text" required onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-blue-500" placeholder="Sesuai KTP/Rekening" /></div></div>
@@ -527,14 +422,11 @@
                                 <div><label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1 uppercase">Nomor WhatsApp</label><div className="relative"><i className="fab fa-whatsapp absolute left-4 top-3 text-emerald-500 text-sm"></i><input type="tel" required onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-blue-500" placeholder="0812xxxxxx" /></div></div>
                                 <div><label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1 uppercase">Kata Sandi Baru</label><div className="relative"><i className="fas fa-lock absolute left-4 top-3 text-slate-500 text-sm"></i><input type="password" required onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-blue-500" placeholder="Minimal 6 karakter" /></div></div>
 
-                                <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold py-4 rounded-xl text-sm transition-all shadow-lg mt-2 flex items-center justify-center">
+                                <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 text-white font-bold py-4 rounded-xl text-sm transition-all shadow-lg mt-2 flex items-center justify-center">
                                     {isLoading ? <i className="fas fa-circle-notch fa-spin"></i> : "Daftar Sekarang"}
                                 </button>
                             </form>
-
-                            <p className="text-center text-xs text-slate-400 mt-6">
-                                Sudah punya akun? <button onClick={onBackToLogin} className="text-blue-400 font-bold hover:text-blue-300">Login di sini</button>
-                            </p>
+                            <p className="text-center text-xs text-slate-400 mt-6">Sudah punya akun? <button onClick={onBackToLogin} className="text-blue-400 font-bold">Login di sini</button></p>
                         </div>
                     </div>
                 </div>
@@ -548,24 +440,24 @@
             const [errorMsg, setErrorMsg] = useState('');
 
             const handleSubmit = async (e) => {
-                e.preventDefault();
-                setIsLoading(true);
-                setErrorMsg('');
+                e.preventDefault(); setIsLoading(true); setErrorMsg('');
 
-                if (!window.KreaNovaBackend || !window.KreaNovaBackend.auth) {
-                    setErrorMsg("Sistem Database belum terhubung. Konfigurasi Firebase tidak valid.");
-                    setIsLoading(false);
-                    return;
+                if (!window.KreaNovaBackend) {
+                    setErrorMsg("Firebase belum dimuat."); setIsLoading(false); return;
                 }
 
                 try {
-                    // Simulasi Login (Akan diganti Firebase Real)
-                    setTimeout(() => {
-                        setIsLoading(false);
-                        onLogin({ name: "Pengguna Test", userId: "KREANOVA999", referralCode: "TESTER123", email: email });
-                    }, 1000);
+                    const { auth, db, signInWithEmailAndPassword, getDoc, doc } = window.KreaNovaBackend;
+                    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                    const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+                    
+                    if (userDoc.exists()) {
+                        onLogin(userDoc.data());
+                    } else {
+                        throw new Error("Data pengguna tidak ditemukan di database.");
+                    }
                 } catch (error) {
-                    setErrorMsg("Login gagal: " + error.message);
+                    setErrorMsg(error.message.replace("Firebase: ", ""));
                     setIsLoading(false);
                 }
             };
@@ -573,31 +465,22 @@
             return (
                 <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-950 p-6 relative overflow-hidden max-w-md mx-auto shadow-2xl">
                     <div className="absolute -top-32 -left-32 w-64 h-64 bg-blue-900/30 rounded-full blur-3xl"></div>
-                    <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-purple-900/20 rounded-full blur-3xl"></div>
-                    
                     <div className="w-full z-10 animate-fade-in">
                         <div className="flex flex-col items-center mb-10">
                             <KreaNovaLogo className="w-24 h-24 mb-4 drop-shadow-[0_0_15px_rgba(212,175,55,0.3)]" />
                             <h1 className="text-3xl font-black text-white tracking-tight">KREANOVA <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#d4af37] to-[#fef08a]">AI</span></h1>
-                            <p className="text-sm text-slate-400 mt-2 font-medium tracking-wide">Solusi Teknologi Cerdas</p>
                         </div>
-
                         <div className="bg-slate-900/80 backdrop-blur-xl p-6 rounded-3xl border border-slate-800 shadow-2xl">
-                            <h2 className="text-lg font-bold text-white mb-6 text-center">Login ke Akun Anda</h2>
-                            
+                            <h2 className="text-lg font-bold text-white mb-6 text-center">Login Member</h2>
                             {errorMsg && <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-xl text-center">{errorMsg}</div>}
-
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                <div><label className="block text-xs font-medium text-slate-400 mb-1.5 ml-1">Email</label><div className="relative"><i className="fas fa-user absolute left-4 top-3.5 text-slate-500 text-sm"></i><input type="email" required onChange={e=>setEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:border-blue-500" placeholder="Masukkan Email Anda" /></div></div>
-                                <div><div className="flex justify-between items-center mb-1.5 ml-1 mr-1"><label className="block text-xs font-medium text-slate-400">Kata Sandi</label><a href="#" className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors">Lupa Sandi?</a></div><div className="relative"><i className="fas fa-lock absolute left-4 top-3.5 text-slate-500 text-sm"></i><input type="password" required onChange={e=>setPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:border-blue-500" placeholder="Masukkan kata sandi" /></div></div>
-                                <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold py-4 rounded-2xl text-sm transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)] mt-4 flex items-center justify-center">
+                                <div><label className="block text-xs font-medium text-slate-400 mb-1.5 ml-1">Email</label><div className="relative"><i className="fas fa-user absolute left-4 top-3.5 text-slate-500 text-sm"></i><input type="email" required onChange={e=>setEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl pl-11 pr-4 py-3.5 text-sm" placeholder="Masukkan Email Anda" /></div></div>
+                                <div><label className="block text-xs font-medium text-slate-400 mb-1.5 ml-1">Kata Sandi</label><div className="relative"><i className="fas fa-lock absolute left-4 top-3.5 text-slate-500 text-sm"></i><input type="password" required onChange={e=>setPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl pl-11 pr-4 py-3.5 text-sm" placeholder="Masukkan kata sandi" /></div></div>
+                                <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 text-white font-bold py-4 rounded-2xl text-sm transition-all shadow-lg flex justify-center">
                                     {isLoading ? <i className="fas fa-circle-notch fa-spin"></i> : "Masuk ke Dashboard"}
                                 </button>
                             </form>
-
-                            <p className="text-center text-xs text-slate-400 mt-8">
-                                Belum punya akun? <button onClick={() => onGoToRegister()} className="text-[#d4af37] font-bold hover:text-[#fef08a] transition-colors">Klik di sini untuk mendaftar</button>
-                            </p>
+                            <p className="text-center text-xs text-slate-400 mt-8">Belum punya akun? <button onClick={() => onGoToRegister()} className="text-[#d4af37] font-bold hover:text-[#fef08a]">Klik di sini untuk mendaftar</button></p>
                         </div>
                     </div>
                 </div>
@@ -619,35 +502,16 @@
                 }
             }, []);
 
-            const handleGoToRegister = (code = '') => {
-                setReferralCode(code);
-                setCurrentView('register');
+            const handleLogout = async () => {
+                if(window.KreaNovaBackend) await window.KreaNovaBackend.signOut(window.KreaNovaBackend.auth);
+                setActiveUser(null); setCurrentView('login');
             };
 
-            const handleRegisterSuccess = (nominal) => {
-                setTransferNominal(nominal);
-                setCurrentView('pending_payment');
-            };
-
-            const handleLoginSuccess = (userData) => {
-                setActiveUser(userData);
-                setCurrentView('dashboard');
-            };
-
-            const handleLogout = () => {
-                setActiveUser(null);
-                setCurrentView('login');
-            };
-
-            const handleCheckPayment = () => {
-                alert("Sistem sedang mengecek mutasi rekening...");
-            };
-
-            if (currentView === 'login') return <LoginPage onLogin={handleLoginSuccess} onGoToRegister={handleGoToRegister} />;
-            if (currentView === 'register') return <RegisterPage onRegisterSuccess={handleRegisterSuccess} onBackToLogin={() => setCurrentView('login')} initialReferralCode={referralCode} />;
-            if (currentView === 'pending_payment') return <PaymentInstructionPage nominal={transferNominal} onRefresh={handleCheckPayment} onLogout={handleLogout} />;
+            if (currentView === 'login') return <LoginPage onLogin={(userData) => { setActiveUser(userData); setCurrentView(userData.status === 'PENDING' ? 'pending_payment' : 'dashboard'); if(userData.status === 'PENDING') setTransferNominal(userData.billAmount); }} onGoToRegister={() => setCurrentView('register')} />;
+            if (currentView === 'register') return <RegisterPage onRegisterSuccess={(nom) => { setTransferNominal(nom); setCurrentView('pending_payment'); }} onBackToLogin={() => setCurrentView('login')} initialReferralCode={referralCode} />;
+            if (currentView === 'pending_payment') return <PaymentInstructionPage nominal={transferNominal} onLogout={handleLogout} />;
             
-            return <MemberApp onLogout={handleLogout} userData={activeUser} walletData={null} />;
+            return <MemberApp onLogout={handleLogout} userData={activeUser} />;
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
