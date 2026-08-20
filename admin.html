@@ -30,18 +30,43 @@
 <body>
     <div id="root"></div>
 
+    <!-- FIREBASE SDK (BACKEND ENGINE) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, getDocs, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // =========================================================================
+        // TUGAS ANDA SELANJUTNYA: ISI KONFIGURASI INI DARI GOOGLE FIREBASE
+        // =========================================================================
+        const firebaseConfig = {
+            apiKey: "KOSONG",
+            authDomain: "KOSONG",
+            projectId: "KOSONG",
+            storageBucket: "KOSONG",
+            messagingSenderId: "KOSONG",
+            appId: "KOSONG"
+        };
+        // =========================================================================
+
+        let app, auth, db;
+        if(firebaseConfig.apiKey !== "KOSONG") {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        }
+
+        window.KreaNovaBackend = { auth, db, collection, getDocs, updateDoc, doc };
+    </script>
+
     <script type="text/babel">
         const { useState, useEffect } = React;
 
         const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
 
         const AdminUserManagement = () => {
-            const [users, setUsers] = useState([
-                { id: 'KREANOVA005', name: 'Ahmad Faisal', email: 'ahmad@email.com', wa: '081299998888', bank: '-', bankOwner: '-', status: 'PENDING_PAYMENT', join: 'Hari Ini, 10:15', nominal: 150857, sponsor: 'Budi Santoso' },
-                { id: 'KREANOVA001', name: 'Budi Santoso', email: 'budi.s@email.com', wa: '081234567890', bank: 'BCA - 8739123456', bankOwner: 'BUDI SANTOSO', status: 'ACTIVE', join: '12 Aug 2026', nominal: 0, sponsor: 'ROOT' },
-                { id: 'KREANOVA002', name: 'Andi Wijaya', email: 'andi.w@email.com', wa: '085678901234', bank: 'MANDIRI - 1122334455', bankOwner: 'ANDI WIJAYA', status: 'ACTIVE', join: '15 Aug 2026', nominal: 0, sponsor: 'Budi Santoso' },
-                { id: 'KREANOVA003', name: 'Siti Aminah', email: 'siti.a@email.com', wa: '081999888777', bank: 'BRI - 009988776655', bankOwner: 'SITI AMINAH', status: 'SUSPENDED', join: '16 Aug 2026', nominal: 0, sponsor: 'Budi Santoso' },
-            ]);
+            // DATABASE DIKOSONGKAN SIAP UNTUK REAL DATA
+            const [users, setUsers] = useState([]);
             const [toast, setToast] = useState(null);
 
             const showToast = (msg) => {
@@ -160,10 +185,8 @@
         };
 
         const AdminFinanceManagement = () => {
-            const [withdrawals, setWithdrawals] = useState([
-                { id: 'WD-20260819-01', user: 'Andi Wijaya', userId: 'KREANOVA002', amount: 1500000, bank: 'MANDIRI', accNum: '1122334455', accName: 'ANDI WIJAYA', date: 'Hari ini, 09:30', status: 'PENDING' },
-                { id: 'WD-20260819-02', user: 'Budi Santoso', userId: 'KREANOVA001', amount: 500000, bank: 'BCA', accNum: '8739123456', accName: 'BUDI SANTOSO', date: 'Hari ini, 10:15', status: 'PENDING' },
-            ]);
+            // DATABASE DIKOSONGKAN SIAP UNTUK REAL DATA
+            const [withdrawals, setWithdrawals] = useState([]);
             const [toast, setToast] = useState(null);
 
             const showToast = (msg) => {
@@ -401,12 +424,13 @@
         };
 
         const DashboardCards = () => {
+            // STATISTIK DIKOSONGKAN SIAP UNTUK REAL DATA
             const STATS = {
-                totalUsers: 12450,
-                activeUsers: 8900,
-                revenue: 1867500000,
-                totalBonusPaid: 645000000,
-                pendingWithdrawals: 45000000
+                totalUsers: 0,
+                activeUsers: 0,
+                revenue: 0,
+                totalBonusPaid: 0,
+                pendingWithdrawals: 0
             };
 
             return (
