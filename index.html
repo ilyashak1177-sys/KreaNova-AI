@@ -56,12 +56,12 @@
         const KreaNovaLogo = ({ className = "w-12 h-12" }) => (
             <img 
                 src="IMG_20260820_224441.jpg" 
-                alt="KreaNova AI Logo" 
+                alt="Logo Aplikasi" 
                 className={`${className} object-cover rounded-full shadow-[0_0_15px_rgba(212,175,55,0.4)] border-2 border-[#d4af37]/60 bg-slate-900 transition-all duration-300`}
                 onError={(e) => {
-                    // Jika gambar gagal dimuat, barulah sistem ini (KA) menyala
+                    // Jika gambar gagal dimuat, barulah sistem ini (MA) menyala
                     e.target.onerror = null; 
-                    e.target.src = "https://ui-avatars.com/api/?name=KreaNova+AI&background=020617&color=d4af37&rounded=true&bold=true&border=1";
+                    e.target.src = "https://ui-avatars.com/api/?name=MITRA+AI&background=020617&color=d4af37&rounded=true&bold=true&border=1";
                 }}
             />
         );
@@ -335,8 +335,12 @@
         const AiStudio = () => {
             const [products, setProducts] = useState([{ id: 'tutorial', name: "Tutorial Produk AI", url: "#", icon: "fa-youtube", active: true, isTutorial: true }]);
             useEffect(() => {
-                const saved = localStorage.getItem('kreanova_ai_products');
-                if (saved) setProducts(JSON.parse(saved));
+                try {
+                    const saved = localStorage.getItem('kreanova_ai_products');
+                    if (saved) setProducts(JSON.parse(saved));
+                } catch (e) {
+                    console.error("Gagal memuat data menu AI", e);
+                }
             }, []);
 
             return (
