@@ -46,7 +46,7 @@
         let app, auth, db;
         try {
             app = initializeApp(firebaseConfig); auth = getAuth(app); db = getFirestore(app);
-        } catch (error) { console.error("Firebase Error:", error); }
+        } catch (error) { console.warn("Firebase Warning:", error.message); }
         window.KreaNovaBackend = { auth, db, collection, getDocs, updateDoc, deleteDoc, doc, setDoc, getDoc };
     </script>
 
@@ -132,7 +132,7 @@
                     const querySnapshot = await getDocs(collection(db, "users"));
                     const userList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setUsers(userList);
-                } catch (error) { console.error(error); }
+                } catch (error) { console.warn("Pratinjau Offline: Tidak dapat memuat data member."); }
                 setLoading(false);
             };
 
@@ -184,11 +184,10 @@
             );
         };
 
-        // --- 4. CMS TAUTAN (DIPERBARUI) ---
+        // --- 4. CMS TAUTAN + TRIPAY ---
         const AdminLinks = ({ showToast }) => {
             const [isSaving, setIsSaving] = useState(false);
-            
-            // Default 7 Menu Awal
+            const [tripayLink, setTripayLink] = useState('');
             const [mainMenus, setMainMenus] = useState([
                 { id: 1, name: 'Tutorial Penggunaan GenAI', url: '' },
                 { id: 2, name: 'Affiliate Produk', url: '' },
@@ -207,29 +206,28 @@
                         const docSnap = await getDoc(doc(db, "settings", "global_links"));
                         if (docSnap.exists()) {
                             const data = docSnap.data();
-                            // Pastikan data yang diambil adalah format array terbaru
                             if (data.mainMenus && Array.isArray(data.mainMenus) && data.mainMenus.length > 0) {
                                 setMainMenus(data.mainMenus);
                             }
+                            if (data.tripayLink) {
+                                setTripayLink(data.tripayLink);
+                            }
                         }
-                    } catch (e) { console.error("Gagal load link", e); }
+                    } catch (e) { console.warn("Pratinjau Offline: Memuat tautan bawaan."); }
                 };
                 fetchLinks();
             }, []);
 
-            // Fungsi Ubah Nilai Input
             const handleMenuChange = (index, field, value) => {
                 const newMenus = [...mainMenus];
                 newMenus[index][field] = value;
                 setMainMenus(newMenus);
             };
 
-            // Fungsi Tambah Slot Dinamis
             const addMenuSlot = () => {
                 setMainMenus([...mainMenus, { id: Date.now(), name: `Menu Baru ${mainMenus.length + 1}`, url: '' }]);
             };
 
-            // Fungsi Hapus Slot
             const removeMenuSlot = (index) => {
                 setMainMenus(mainMenus.filter((_, i) => i !== index));
             };
@@ -239,8 +237,12 @@
                 if(!window.KreaNovaBackend) { showToast('Gagal terhubung ke Firebase', 'error'); setIsSaving(false); return; }
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
-                    await setDoc(doc(db, "settings", "global_links"), { mainMenus });
-                    showToast('Sukses! Semua link berhasil di-deploy.', 'success');
+                    // Menyimpan data Menu dan Tripay ke Database
+                    await setDoc(doc(db, "settings", "global_links"), { 
+                        mainMenus,
+                        tripayLink 
+                    });
+                    showToast('Sukses! Semua link & Tripay berhasil di-deploy.', 'success');
                 } catch (e) { showToast('Gagal menyimpan: ' + e.message, 'error'); }
                 setIsSaving(false);
             };
@@ -258,17 +260,37 @@
                         </button>
                     </div>
 
-                    {/* KARTU TUNGGAL MENU UTAMA */}
+                    {/* KARTU TRIPAY PAYMENT GATEWAY */}
+                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-blue-500">
+                        <h3 className="text-xl font-bold text-white mb-4 flex items-center border-b border-slate-700/50 pb-4">
+                            <i className="fas fa-credit-card text-blue-400 mr-3"></i> Payment Gateway (Tripay)
+                        </h3>
+                        <div className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 transition-all hover:border-blue-500/50 shadow-sm relative overflow-hidden">
+                            <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-xl pointer-events-none"></div>
+                            <div className="mb-2 relative z-10">
+                                <label className="text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">Link URL Payment Tripay (Pendaftaran)</label>
+                                <p className="text-[10px] text-slate-400 mb-4">Tautan ini akan diarahkan secara otomatis saat calon member mengklik tombol pendaftaran/pembayaran di web utama.</p>
+                                <input 
+                                    type="text" 
+                                    value={tripayLink} 
+                                    onChange={(e) => setTripayLink(e.target.value)} 
+                                    placeholder="https://tripay.co.id/checkout/..." 
+                                    className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-lg p-3 text-sm text-white outline-none transition" 
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* KARTU MENU UTAMA */}
                     <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-emerald-500">
                         <h3 className="text-xl font-bold text-white mb-6 flex items-center justify-between border-b border-slate-700/50 pb-4">
-                            <div><i className="fas fa-th-list text-emerald-400 mr-2"></i> Menu Utama KreaNova AI</div>
+                            <div><i className="fas fa-th-list text-emerald-400 mr-2"></i> 10 Menu Utama KreaNova AI</div>
                             <span className="bg-emerald-500/20 text-emerald-400 text-xs px-3 py-1 rounded-full font-bold">{mainMenus.length} Slot Aktif</span>
                         </h3>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {mainMenus.map((menu, index) => (
                                 <div key={menu.id} className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 relative group transition-all hover:border-emerald-500/50 shadow-sm">
-                                    {/* Tombol Hapus (Tampil saat di-hover jika slot > 1) */}
                                     {mainMenus.length > 1 && (
                                         <button onClick={() => removeMenuSlot(index)} className="absolute -top-3 -right-3 bg-red-500 text-white w-7 h-7 rounded-full text-xs shadow-lg opacity-0 group-hover:opacity-100 transition hover:bg-red-600 z-10 tooltip" title="Hapus Slot">
                                             <i className="fas fa-times"></i>
