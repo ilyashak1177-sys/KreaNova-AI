@@ -23,8 +23,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCWpjChuqzjUe4_foM2gCS4_XoCQE33lHk",
@@ -39,7 +39,8 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        window.KreaNovaWeb = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, doc, setDoc, getDoc };
+        // Menyimpan fungsi ke window agar bisa diakses oleh React
+        window.KreaNovaWeb = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, doc, setDoc };
     </script>
 
     <script type="text/babel">
@@ -47,7 +48,7 @@
 
         const AuthApp = () => {
             const [view, setView] = useState('login'); // 'login', 'register', 'forgot', 'dashboard'
-            const [showPassword, setShowPassword] = useState(false);
+            const [showPassword, setShowPassword] = useState(false); // Logika Ikon Mata
             const [loading, setLoading] = useState(false);
             const [toast, setToast] = useState({ show: false, msg: '', type: '' });
             
@@ -62,18 +63,20 @@
                 setTimeout(() => setToast({ show: false, msg: '', type: '' }), 4000);
             };
 
+            // Logika Login yang Dipercepat
             const handleLogin = async (e) => {
                 e.preventDefault();
-                setLoading(true);
+                setLoading(true); // Loading instan agar tidak terasa lambat
                 try {
                     const { auth, signInWithEmailAndPassword } = window.KreaNovaWeb;
                     await signInWithEmailAndPassword(auth, email, password);
                     setView('dashboard');
                     displayToast('Login berhasil!', 'success');
                 } catch (error) {
-                    displayToast('Email atau kata sandi salah.', 'error');
+                    displayToast('Email atau kata sandi salah. Silakan periksa kembali.', 'error');
+                } finally {
+                    setLoading(false); // Pastikan loading berhenti apapun hasilnya
                 }
-                setLoading(false);
             };
 
             const handleRegister = async (e) => {
@@ -82,11 +85,10 @@
                 try {
                     const { auth, db, createUserWithEmailAndPassword, doc, setDoc } = window.KreaNovaWeb;
                     
-                    // 1. Buat Akun di Firebase Auth
                     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
 
-                    // 2. Simpan Data ke Firestore agar terbaca di Super Admin (Real-Time)
+                    // Mengirim data ke Panel Admin
                     await setDoc(doc(db, "users", user.uid), {
                         userId: user.uid,
                         name: name,
@@ -95,22 +97,24 @@
                         sponsor: "KREANOVA",
                         bankName: "",
                         bankAccount: "",
-                        status: "PENDING", // Menunggu ACC Admin
+                        status: "PENDING",
                         createdAt: new Date().toISOString()
                     });
 
-                    displayToast('Pendaftaran sukses! Menunggu aktivasi admin.', 'success');
+                    displayToast('Pendaftaran sukses! Data telah masuk ke admin.', 'success');
                     setView('login');
                 } catch (error) {
                     displayToast('Gagal mendaftar: ' + error.message, 'error');
+                } finally {
+                    setLoading(false);
                 }
-                setLoading(false);
             };
 
+            // Logika Eksekusi Lupa Password
             const handleForgot = async (e) => {
                 e.preventDefault();
                 if (!email) {
-                    displayToast('Masukkan email Anda terlebih dahulu.', 'error');
+                    displayToast('Masukkan alamat email Anda terlebih dahulu.', 'error');
                     return;
                 }
                 setLoading(true);
@@ -120,18 +124,18 @@
                     displayToast('Tautan reset password telah dikirim ke email Anda!', 'success');
                     setView('login');
                 } catch (error) {
-                    displayToast('Gagal: Pastikan email terdaftar.', 'error');
+                    displayToast('Gagal mengirim: Pastikan email sudah terdaftar.', 'error');
+                } finally {
+                    setLoading(false);
                 }
-                setLoading(false);
             };
 
-            // Render Dashboard Sementara (Bisa dikembangkan nanti untuk menampilkan 10 Menu)
             if (view === 'dashboard') {
                 return (
                     <div className="glass-panel p-8 rounded-3xl w-full text-center animate-fade-in glow-effect border-t-4 border-t-blue-500">
                         <img src="IMG_20260820_224441.jpg" alt="Logo" className="w-20 h-20 mx-auto rounded-full border-2 border-yellow-500 mb-4" onError={(e) => e.target.style.display='none'} />
                         <h2 className="text-2xl font-bold text-white mb-2">Selamat Datang!</h2>
-                        <p className="text-slate-400 text-sm mb-6">Akun Anda berhasil masuk ke dalam sistem KreaNova AI.</p>
+                        <p className="text-slate-400 text-sm mb-6">Akun Anda berhasil divalidasi oleh sistem KreaNova AI.</p>
                         <button onClick={() => { window.KreaNovaWeb.signOut(window.KreaNovaWeb.auth); setView('login'); }} className="bg-red-500/10 text-red-400 border border-red-500/30 px-6 py-2 rounded-full font-bold hover:bg-red-500 hover:text-white transition">
                             <i className="fas fa-sign-out-alt mr-2"></i>Keluar Aplikasi
                         </button>
@@ -157,7 +161,7 @@
                             </p>
                         </div>
 
-                        {/* --- FORM LOGIN --- */}
+                        {/* --- KARTU FORM LOGIN --- */}
                         {view === 'login' && (
                             <form onSubmit={handleLogin} className="space-y-5 animate-fade-in">
                                 <div>
@@ -170,26 +174,25 @@
                                 <div>
                                     <div className="flex justify-between items-center mb-1">
                                         <label className="text-xs font-bold text-slate-400 uppercase">Kata Sandi</label>
-                                        <button type="button" onClick={() => setView('forgot')} className="text-[10px] font-bold text-blue-400 hover:text-blue-300">Lupa Password?</button>
+                                        <button type="button" onClick={() => setView('forgot')} className="text-[10px] font-bold text-blue-400 hover:text-blue-300 transition">Lupa Password?</button>
                                     </div>
                                     <div className="relative">
                                         <i className="fas fa-lock absolute left-4 top-3.5 text-slate-500"></i>
-                                        {/* Input Password Dinamis */}
+                                        {/* Implementasi Fitur Ikon Mata */}
                                         <input type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-slate-900/50 border border-slate-700 text-white rounded-xl py-3 pl-10 pr-12 focus:outline-none focus:border-blue-500 transition" placeholder="••••••••" />
-                                        {/* Toggle Ikon Mata */}
                                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3.5 text-slate-400 hover:text-white transition">
                                             <i className={`fas ${showPassword ? 'fa-eye-slash text-blue-400' : 'fa-eye'}`}></i>
                                         </button>
                                     </div>
                                 </div>
-                                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transition transform hover:-translate-y-1">
-                                    {loading ? <i className="fas fa-circle-notch fa-spin"></i> : 'Masuk ke Dashboard'}
+                                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transition transform hover:-translate-y-1 flex items-center justify-center">
+                                    {loading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : 'Masuk ke Dashboard'}
                                 </button>
                                 <p className="text-center text-xs text-slate-400 mt-4">Belum punya akun? <button type="button" onClick={() => setView('register')} className="text-yellow-400 font-bold hover:underline">Daftar Sekarang</button></p>
                             </form>
                         )}
 
-                        {/* --- FORM REGISTER --- */}
+                        {/* --- KARTU FORM REGISTER --- */}
                         {view === 'register' && (
                             <form onSubmit={handleRegister} className="space-y-4 animate-fade-in">
                                 <div>
@@ -213,14 +216,14 @@
                                         </button>
                                     </div>
                                 </div>
-                                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-2">
-                                    {loading ? <i className="fas fa-circle-notch fa-spin"></i> : 'Daftar Akun Baru'}
+                                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-2 flex items-center justify-center">
+                                    {loading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : 'Daftar Akun Baru'}
                                 </button>
                                 <p className="text-center text-xs text-slate-400 mt-4">Sudah punya akun? <button type="button" onClick={() => setView('login')} className="text-blue-400 font-bold hover:underline">Masuk</button></p>
                             </form>
                         )}
 
-                        {/* --- FORM LUPA PASSWORD --- */}
+                        {/* --- KARTU FORM LUPA PASSWORD --- */}
                         {view === 'forgot' && (
                             <form onSubmit={handleForgot} className="space-y-5 animate-fade-in">
                                 <div className="text-center mb-2">
@@ -234,10 +237,10 @@
                                         <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-slate-900/50 border border-slate-700 text-white rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:border-blue-500 transition" placeholder="Masukkan email terdaftar..." />
                                     </div>
                                 </div>
-                                <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition">
-                                    {loading ? <i className="fas fa-circle-notch fa-spin"></i> : 'Kirim Tautan Reset'}
+                                <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center">
+                                    {loading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : 'Kirim Tautan Reset'}
                                 </button>
-                                <button type="button" onClick={() => setView('login')} className="w-full text-xs font-bold text-slate-400 hover:text-white mt-2">
+                                <button type="button" onClick={() => setView('login')} className="w-full text-xs font-bold text-slate-400 hover:text-white mt-2 transition">
                                     <i className="fas fa-arrow-left mr-2"></i>Kembali ke Halaman Login
                                 </button>
                             </form>
