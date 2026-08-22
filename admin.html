@@ -31,7 +31,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, getDocs, updateDoc, deleteDoc, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCWpjChuqzjUe4_foM2gCS4_XoCQE33lHk",
@@ -47,7 +47,7 @@
         try {
             app = initializeApp(firebaseConfig); auth = getAuth(app); db = getFirestore(app);
         } catch (error) { console.warn("Firebase Warning:", error.message); }
-        window.KreaNovaBackend = { auth, db, collection, getDocs, updateDoc, deleteDoc, doc, setDoc, getDoc };
+        window.KreaNovaBackend = { auth, db, collection, getDocs, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where };
     </script>
 
     <script type="text/babel">
@@ -137,12 +137,64 @@
             };
 
             const handleAction = async (docId, action) => {
-                const { db, doc, updateDoc, deleteDoc } = window.KreaNovaBackend;
+                const { db, doc, updateDoc, deleteDoc, collection, query, where, getDocs, getDoc } = window.KreaNovaBackend;
                 try {
                     if (action === 'DELETE') {
                         if(confirm('Data akan hangus. Lanjutkan?')) { await deleteDoc(doc(db, "users", docId)); showToast('Member dihapus permanen!', 'success'); }
                     } else if (action === 'ACTIVE') {
-                        await updateDoc(doc(db, "users", docId), { status: "ACTIVE" }); showToast('Akun Member Diaktifkan!', 'success');
+                        // AMBIL DATA MEMBER YANG MAU DIAKTIFKAN
+                        const userRef = doc(db, "users", docId);
+                        const userSnap = await getDoc(userRef);
+                        
+                        if(userSnap.exists()) {
+                            const userData = userSnap.data();
+                            
+                            if (userData.status !== 'ACTIVE') {
+                                // 1. Ubah status member menjadi aktif
+                                await updateDoc(userRef, { status: "ACTIVE" });
+                                
+                                // 2. EKSEKUSI PEMBAGIAN BONUS KE SPONSOR
+                                if (userData.sponsor) {
+                                    // Cari akun Sponsor berdasarkan Kode Referral-nya
+                                    const usersCol = collection(db, "users");
+                                    const q = query(usersCol, where("referralCode", "==", userData.sponsor));
+                                    const sponsorSnaps = await getDocs(q);
+                                    
+                                    if (!sponsorSnaps.empty) {
+                                        const sponsorDoc = sponsorSnaps.docs[0];
+                                        const sponsorData = sponsorDoc.data();
+                                        const sponsorRef = doc(db, "users", sponsorDoc.id);
+
+                                        // Tambah Bonus Sponsor (Rp 40.000)
+                                        let newWallet = (sponsorData.walletAvailable || 0) + 40000;
+                                        let leftCount = sponsorData.leftDirects || 0;
+                                        let rightCount = sponsorData.rightDirects || 0;
+                                        let isQual = sponsorData.isQualified || false;
+
+                                        // Hitung penempatan langsung (Kiri/Kanan)
+                                        if (userData.position === 'KIRI') leftCount++;
+                                        if (userData.position === 'KANAN') rightCount++;
+
+                                        // Cek Bonus Qualified Rp 50.000 (Jika 10 Kiri & 10 Kanan)
+                                        if (leftCount >= 10 && rightCount >= 10 && !isQual) {
+                                            newWallet += 50000; // Bonus Qualified Masuk
+                                            isQual = true;      // Tandai sudah qualified agar tidak turun dobel
+                                        }
+
+                                        // Simpan dompet dan status terbaru milik Sponsor
+                                        await updateDoc(sponsorRef, {
+                                            walletAvailable: newWallet,
+                                            leftDirects: leftCount,
+                                            rightDirects: rightCount,
+                                            isQualified: isQual
+                                        });
+                                    }
+                                }
+                                showToast('Akun Aktif & Bonus Disalurkan!', 'success');
+                            } else {
+                                showToast('Akun ini sudah aktif!', 'error');
+                            }
+                        }
                     } else if (action === 'LOCK') {
                         await updateDoc(doc(db, "users", docId), { status: "LOCKED" }); showToast('Akun dikunci demi keamanan.', 'error');
                     }
