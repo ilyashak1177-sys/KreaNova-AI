@@ -213,13 +213,29 @@
                     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
 
+                    // 1. Logika Default Akun Induk (Jika Kosong otomatis KREANOVA)
+                    const finalSponsor = (!sponsor || sponsor.trim() === '') ? 'KREANOVA' : sponsor.toUpperCase();
+
+                    // 2. Generate Kode Referral Unik untuk Member Baru (Contoh: KN45829)
+                    const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
+
+                    // 3. Set Biaya Pendaftaran Rp 150.000 + Kode Unik untuk Transfer
+                    const uniqueCode = Math.floor(Math.random() * 900) + 100;
+                    const billAmount = 150000 + uniqueCode;
+
                     await setDoc(doc(db, "users", user.uid), {
                         userId: user.uid,
                         name: name,
                         email: email,
                         phone: phone,
-                        sponsor: sponsor || "KREANOVA",
+                        sponsor: finalSponsor,
                         position: position,
+                        referralCode: refCode,      // Kode rujukan miliknya sendiri
+                        billAmount: billAmount,     // Tagihan Registrasi
+                        walletAvailable: 0,         // Saldo/Dompet Awal
+                        leftDirects: 0,             // Counter sponsor langsung di Kiri
+                        rightDirects: 0,            // Counter sponsor langsung di Kanan
+                        isQualified: false,         // Penanda apakah sudah dapat Bonus Qualified
                         bankName: "",
                         bankAccount: "",
                         status: "PENDING",
