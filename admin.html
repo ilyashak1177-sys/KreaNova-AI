@@ -46,7 +46,7 @@
         let app, auth, db;
         try {
             app = initializeApp(firebaseConfig); auth = getAuth(app); db = getFirestore(app);
-        } catch (error) { console.warn("Firebase Warning:", error.message); }
+        } catch (error) { console.error("Firebase Error:", error); }
         window.KreaNovaBackend = { auth, db, collection, getDocs, updateDoc, deleteDoc, doc, setDoc, getDoc };
     </script>
 
@@ -57,14 +57,14 @@
             useEffect(() => { const timer = setTimeout(onClose, 3000); return () => clearTimeout(timer); }, [onClose]);
             const bgColor = type === 'success' ? 'bg-emerald-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
             return (
-                <div className={`fixed top-5 right-5 ${bgColor} text-white px-6 py-3 rounded-lg shadow-2xl z-50 animate-slide-up flex items-center gap-3`}>
+                <div className={`fixed top-5 right-5 ${bgColor} text-white px-6 py-3 rounded-lg shadow-2xl z-[9999] animate-slide-up flex items-center gap-3`}>
                     <i className={`fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} text-xl`}></i>
                     <span className="font-semibold text-sm">{message}</span>
                 </div>
             );
         };
 
-        // --- 1. DASHBOARD ---
+        // --- DASHBOARD OVERVIEW ---
         const DashboardOverview = () => (
             <div className="animate-fade-in space-y-6">
                 <div className="flex justify-between items-end mb-8">
@@ -94,7 +94,7 @@
             </div>
         );
 
-        // --- 2. POHON JARINGAN ---
+        // --- POHON JARINGAN ---
         const AdminNetworkTree = () => (
             <div className="animate-fade-in h-full flex flex-col">
                 <h2 className="text-2xl font-bold text-white mb-6"><i className="fas fa-sitemap text-yellow-500 mr-2"></i> Visualisasi Jaringan Binary</h2>
@@ -116,7 +116,7 @@
             </div>
         );
 
-        // --- 3. DATABASE MEMBER ---
+        // --- DATABASE MEMBER ---
         const AdminUsers = ({ showToast }) => {
             const [users, setUsers] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -132,7 +132,7 @@
                     const querySnapshot = await getDocs(collection(db, "users"));
                     const userList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setUsers(userList);
-                } catch (error) { console.warn("Pratinjau Offline: Tidak dapat memuat data member."); }
+                } catch (error) { console.error(error); }
                 setLoading(false);
             };
 
@@ -184,10 +184,11 @@
             );
         };
 
-        // --- 4. CMS TAUTAN + TRIPAY ---
+        // --- CMS TAUTAN ---
         const AdminLinks = ({ showToast }) => {
             const [isSaving, setIsSaving] = useState(false);
             const [tripayLink, setTripayLink] = useState('');
+            // Default 7 Slot sesuai permintaan
             const [mainMenus, setMainMenus] = useState([
                 { id: 1, name: 'Tutorial Penggunaan GenAI', url: '' },
                 { id: 2, name: 'Affiliate Produk', url: '' },
@@ -209,11 +210,9 @@
                             if (data.mainMenus && Array.isArray(data.mainMenus) && data.mainMenus.length > 0) {
                                 setMainMenus(data.mainMenus);
                             }
-                            if (data.tripayLink) {
-                                setTripayLink(data.tripayLink);
-                            }
+                            if (data.tripayLink) setTripayLink(data.tripayLink);
                         }
-                    } catch (e) { console.warn("Pratinjau Offline: Memuat tautan bawaan."); }
+                    } catch (e) { console.error("Gagal load link", e); }
                 };
                 fetchLinks();
             }, []);
@@ -237,11 +236,7 @@
                 if(!window.KreaNovaBackend) { showToast('Gagal terhubung ke Firebase', 'error'); setIsSaving(false); return; }
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
-                    // Menyimpan data Menu dan Tripay ke Database
-                    await setDoc(doc(db, "settings", "global_links"), { 
-                        mainMenus,
-                        tripayLink 
-                    });
+                    await setDoc(doc(db, "settings", "global_links"), { mainMenus, tripayLink });
                     showToast('Sukses! Semua link & Tripay berhasil di-deploy.', 'success');
                 } catch (e) { showToast('Gagal menyimpan: ' + e.message, 'error'); }
                 setIsSaving(false);
@@ -254,7 +249,7 @@
                             <h2 className="text-2xl font-bold text-white mb-2"><i className="fas fa-link text-blue-500 mr-2"></i> CMS Tautan Global</h2>
                             <p className="text-sm text-slate-400">Ubah link di sini, dan semua perangkat member akan otomatis berubah seketika.</p>
                         </div>
-                        <button onClick={handleSave} disabled={isSaving} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-blue-500/30 transition transform hover:-translate-y-1 w-full md:w-auto">
+                        <button onClick={handleSave} disabled={isSaving} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-blue-500/30 transition w-full md:w-auto">
                             {isSaving ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-cloud-upload-alt mr-2"></i>}
                             {isSaving ? 'Menyimpan...' : 'Deploy Perubahan'}
                         </button>
@@ -265,23 +260,14 @@
                         <h3 className="text-xl font-bold text-white mb-4 flex items-center border-b border-slate-700/50 pb-4">
                             <i className="fas fa-credit-card text-blue-400 mr-3"></i> Payment Gateway (Tripay)
                         </h3>
-                        <div className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 transition-all hover:border-blue-500/50 shadow-sm relative overflow-hidden">
-                            <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-xl pointer-events-none"></div>
-                            <div className="mb-2 relative z-10">
-                                <label className="text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">Link URL Payment Tripay (Pendaftaran)</label>
-                                <p className="text-[10px] text-slate-400 mb-4">Tautan ini akan diarahkan secara otomatis saat calon member mengklik tombol pendaftaran/pembayaran di web utama.</p>
-                                <input 
-                                    type="text" 
-                                    value={tripayLink} 
-                                    onChange={(e) => setTripayLink(e.target.value)} 
-                                    placeholder="https://tripay.co.id/checkout/..." 
-                                    className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-lg p-3 text-sm text-white outline-none transition" 
-                                />
-                            </div>
+                        <div className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 transition-all hover:border-blue-500/50 shadow-sm">
+                            <label className="text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">Link URL Payment Tripay</label>
+                            <p className="text-[10px] text-slate-400 mb-4">Tautan ini akan diarahkan secara otomatis saat calon member mengklik tombol daftar/bayar.</p>
+                            <input type="text" value={tripayLink} onChange={(e) => setTripayLink(e.target.value)} placeholder="https://tripay.co.id/checkout/..." className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-lg p-3 text-sm text-white outline-none" />
                         </div>
                     </div>
 
-                    {/* KARTU MENU UTAMA */}
+                    {/* KARTU MENU UTAMA (TANPA HUB AI) */}
                     <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-emerald-500">
                         <h3 className="text-xl font-bold text-white mb-6 flex items-center justify-between border-b border-slate-700/50 pb-4">
                             <div><i className="fas fa-th-list text-emerald-400 mr-2"></i> 10 Menu Utama KreaNova AI</div>
@@ -296,28 +282,27 @@
                                             <i className="fas fa-times"></i>
                                         </button>
                                     )}
-                                    
                                     <div className="mb-4">
                                         <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider block mb-1">Nama Slot {index + 1}</label>
-                                        <input type="text" value={menu.name} onChange={(e) => handleMenuChange(index, 'name', e.target.value)} className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg p-3 text-sm text-white outline-none transition" />
+                                        <input type="text" value={menu.name} onChange={(e) => handleMenuChange(index, 'name', e.target.value)} className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg p-3 text-sm text-white outline-none" />
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Link URL</label>
-                                        <input type="text" value={menu.url} onChange={(e) => handleMenuChange(index, 'url', e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg p-3 text-sm text-white outline-none transition" />
+                                        <input type="text" value={menu.url} onChange={(e) => handleMenuChange(index, 'url', e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg p-3 text-sm text-white outline-none" />
                                     </div>
                                 </div>
                             ))}
                         </div>
                         
                         <button onClick={addMenuSlot} className="w-full mt-8 py-4 border-2 border-dashed border-emerald-500/30 text-emerald-400 font-bold rounded-xl hover:bg-emerald-500/10 transition flex items-center justify-center group">
-                            <i className="fas fa-plus mr-2 group-hover:scale-125 transition-transform"></i>Tambah Slot
+                            <i className="fas fa-plus mr-2"></i>Tambah Slot Baru
                         </button>
                     </div>
                 </div>
             );
         };
 
-        // --- 5. KEUANGAN (WD) ---
+        // --- KEUANGAN (WD) ---
         const AdminWD = () => (
             <div className="animate-fade-in">
                 <h2 className="text-2xl font-bold text-white mb-6"><i className="fas fa-money-bill-wave text-blue-500 mr-2"></i> Eksekusi Withdrawal (WD)</h2>
@@ -339,7 +324,6 @@
                 <div className="h-screen w-full flex bg-[#0b0f19] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] overflow-hidden">
                     {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
                     
-                    {/* SIDEBAR */}
                     <aside className="w-20 lg:w-72 glass-panel border-r border-slate-800/50 flex flex-col z-20">
                         <div className="h-20 flex items-center justify-center lg:justify-start lg:px-6 border-b border-slate-800/50 shrink-0">
                             <img src="IMG_20260820_224441.jpg" alt="Logo" className="w-10 h-10 rounded-xl shadow-[0_0_15px_rgba(234,179,8,0.3)] border border-yellow-500/50" onError={(e) => e.target.style.display='none'} />
@@ -357,7 +341,6 @@
                         </div>
                     </aside>
                     
-                    {/* AREA UTAMA */}
                     <main className="flex-1 flex flex-col overflow-hidden relative">
                         <header className="h-20 glass-panel border-b border-slate-800/50 flex items-center justify-between px-8 z-10 shrink-0">
                             <div className="flex items-center text-slate-400 text-sm font-medium"><span>Super Admin</span> <i className="fas fa-chevron-right mx-3 text-xs opacity-50"></i> <span className="text-blue-400 capitalize">{activeMenu}</span></div>
