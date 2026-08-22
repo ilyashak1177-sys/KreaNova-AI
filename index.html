@@ -15,11 +15,13 @@
         .glass-panel { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .glow-effect { box-shadow: 0 0 40px rgba(37, 99, 235, 0.15); }
         .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-[#0b0f19]">
-    <div id="root" class="w-full max-w-md p-4"></div>
+    <div id="root" class="w-full max-w-md p-4 relative"></div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -39,56 +41,60 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        // Menyimpan fungsi ke window agar bisa diakses oleh React
         window.KreaNovaWeb = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, doc, setDoc };
     </script>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
 
+        const Toast = ({ message, type, onClose }) => {
+            useEffect(() => { const timer = setTimeout(onClose, 4000); return () => clearTimeout(timer); }, [onClose]);
+            const bgColor = type === 'success' ? 'bg-emerald-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+            return (
+                <div className={`fixed top-5 left-1/2 transform -translate-x-1/2 w-11/12 max-w-sm ${bgColor} text-white px-6 py-3 rounded-xl shadow-2xl z-[9999] animate-slide-up flex items-center gap-3`}>
+                    <i className={`fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} text-xl`}></i>
+                    <span className="font-semibold text-sm">{message}</span>
+                </div>
+            );
+        };
+
         const AuthApp = () => {
-            const [view, setView] = useState('login'); // 'login', 'register', 'forgot', 'dashboard'
-            const [showPassword, setShowPassword] = useState(false); // Logika Ikon Mata
+            const [view, setView] = useState('login'); 
+            const [showPassword, setShowPassword] = useState(false);
             const [loading, setLoading] = useState(false);
-            const [toast, setToast] = useState({ show: false, msg: '', type: '' });
+            const [toast, setToast] = useState(null);
             
-            // Form States
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [name, setName] = useState('');
             const [phone, setPhone] = useState('');
 
-            const displayToast = (msg, type) => {
-                setToast({ show: true, msg, type });
-                setTimeout(() => setToast({ show: false, msg: '', type: '' }), 4000);
-            };
+            const showToast = (msg, type) => setToast({ msg, type });
 
-            // Logika Login yang Dipercepat
             const handleLogin = async (e) => {
                 e.preventDefault();
-                setLoading(true); // Loading instan agar tidak terasa lambat
+                setLoading(true);
                 try {
+                    if(!window.KreaNovaWeb) throw new Error("Koneksi server gagal.");
                     const { auth, signInWithEmailAndPassword } = window.KreaNovaWeb;
                     await signInWithEmailAndPassword(auth, email, password);
                     setView('dashboard');
-                    displayToast('Login berhasil!', 'success');
+                    showToast('Login berhasil!', 'success');
                 } catch (error) {
-                    displayToast('Email atau kata sandi salah. Silakan periksa kembali.', 'error');
-                } finally {
-                    setLoading(false); // Pastikan loading berhenti apapun hasilnya
-                }
+                    showToast('Email atau kata sandi salah.', 'error');
+                } finally { setLoading(false); }
             };
 
             const handleRegister = async (e) => {
                 e.preventDefault();
                 setLoading(true);
                 try {
+                    if(!window.KreaNovaWeb) throw new Error("Koneksi server gagal.");
                     const { auth, db, createUserWithEmailAndPassword, doc, setDoc } = window.KreaNovaWeb;
                     
                     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
 
-                    // Mengirim data ke Panel Admin
                     await setDoc(doc(db, "users", user.uid), {
                         userId: user.uid,
                         name: name,
@@ -101,33 +107,25 @@
                         createdAt: new Date().toISOString()
                     });
 
-                    displayToast('Pendaftaran sukses! Data telah masuk ke admin.', 'success');
+                    showToast('Pendaftaran sukses! Data berhasil masuk ke Admin.', 'success');
                     setView('login');
                 } catch (error) {
-                    displayToast('Gagal mendaftar: ' + error.message, 'error');
-                } finally {
-                    setLoading(false);
-                }
+                    showToast('Gagal mendaftar: ' + error.message, 'error');
+                } finally { setLoading(false); }
             };
 
-            // Logika Eksekusi Lupa Password
             const handleForgot = async (e) => {
                 e.preventDefault();
-                if (!email) {
-                    displayToast('Masukkan alamat email Anda terlebih dahulu.', 'error');
-                    return;
-                }
+                if (!email) { showToast('Masukkan alamat email terlebih dahulu.', 'error'); return; }
                 setLoading(true);
                 try {
                     const { auth, sendPasswordResetEmail } = window.KreaNovaWeb;
                     await sendPasswordResetEmail(auth, email);
-                    displayToast('Tautan reset password telah dikirim ke email Anda!', 'success');
+                    showToast('Tautan reset password terkirim ke email Anda!', 'success');
                     setView('login');
                 } catch (error) {
-                    displayToast('Gagal mengirim: Pastikan email sudah terdaftar.', 'error');
-                } finally {
-                    setLoading(false);
-                }
+                    showToast('Gagal: Email tidak terdaftar.', 'error');
+                } finally { setLoading(false); }
             };
 
             if (view === 'dashboard') {
@@ -135,33 +133,27 @@
                     <div className="glass-panel p-8 rounded-3xl w-full text-center animate-fade-in glow-effect border-t-4 border-t-blue-500">
                         <img src="IMG_20260820_224441.jpg" alt="Logo" className="w-20 h-20 mx-auto rounded-full border-2 border-yellow-500 mb-4" onError={(e) => e.target.style.display='none'} />
                         <h2 className="text-2xl font-bold text-white mb-2">Selamat Datang!</h2>
-                        <p className="text-slate-400 text-sm mb-6">Akun Anda berhasil divalidasi oleh sistem KreaNova AI.</p>
+                        <p className="text-slate-400 text-sm mb-6">Sistem web utama KreaNova AI.</p>
                         <button onClick={() => { window.KreaNovaWeb.signOut(window.KreaNovaWeb.auth); setView('login'); }} className="bg-red-500/10 text-red-400 border border-red-500/30 px-6 py-2 rounded-full font-bold hover:bg-red-500 hover:text-white transition">
-                            <i className="fas fa-sign-out-alt mr-2"></i>Keluar Aplikasi
+                            <i className="fas fa-sign-out-alt mr-2"></i>Keluar
                         </button>
                     </div>
                 );
             }
 
             return (
-                <div className="w-full relative">
-                    {/* Toast Notification */}
-                    {toast.show && (
-                        <div className={`absolute -top-16 left-0 right-0 mx-auto w-max px-4 py-2 rounded-lg text-sm font-bold text-white shadow-xl animate-fade-in z-50 ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`}>
-                            <i className={`fas ${toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} mr-2`}></i>{toast.msg}
-                        </div>
-                    )}
+                <div className="w-full">
+                    {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
                     <div className="glass-panel p-8 rounded-3xl w-full animate-fade-in glow-effect">
                         <div className="text-center mb-8">
                             <img src="IMG_20260820_224441.jpg" alt="Logo" className="w-20 h-20 mx-auto rounded-full border border-yellow-500/50 shadow-[0_0_20px_rgba(234,179,8,0.3)] mb-4" onError={(e) => e.target.style.display='none'} />
                             <h1 className="text-2xl font-black text-white tracking-wide">KreaNova AI</h1>
                             <p className="text-xs text-yellow-500 font-bold uppercase tracking-widest mt-1">
-                                {view === 'login' ? 'Portal Member' : view === 'register' ? 'Pendaftaran' : 'Pulihkan Akun'}
+                                {view === 'login' ? 'Portal Member' : view === 'register' ? 'Pendaftaran Baru' : 'Pulihkan Akun'}
                             </p>
                         </div>
 
-                        {/* --- KARTU FORM LOGIN --- */}
                         {view === 'login' && (
                             <form onSubmit={handleLogin} className="space-y-5 animate-fade-in">
                                 <div>
@@ -178,21 +170,19 @@
                                     </div>
                                     <div className="relative">
                                         <i className="fas fa-lock absolute left-4 top-3.5 text-slate-500"></i>
-                                        {/* Implementasi Fitur Ikon Mata */}
                                         <input type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-slate-900/50 border border-slate-700 text-white rounded-xl py-3 pl-10 pr-12 focus:outline-none focus:border-blue-500 transition" placeholder="••••••••" />
                                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3.5 text-slate-400 hover:text-white transition">
                                             <i className={`fas ${showPassword ? 'fa-eye-slash text-blue-400' : 'fa-eye'}`}></i>
                                         </button>
                                     </div>
                                 </div>
-                                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transition transform hover:-translate-y-1 flex items-center justify-center">
+                                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transition transform hover:-translate-y-1">
                                     {loading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : 'Masuk ke Dashboard'}
                                 </button>
                                 <p className="text-center text-xs text-slate-400 mt-4">Belum punya akun? <button type="button" onClick={() => setView('register')} className="text-yellow-400 font-bold hover:underline">Daftar Sekarang</button></p>
                             </form>
                         )}
 
-                        {/* --- KARTU FORM REGISTER --- */}
                         {view === 'register' && (
                             <form onSubmit={handleRegister} className="space-y-4 animate-fade-in">
                                 <div>
@@ -216,14 +206,13 @@
                                         </button>
                                     </div>
                                 </div>
-                                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-2 flex items-center justify-center">
+                                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-2">
                                     {loading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : 'Daftar Akun Baru'}
                                 </button>
                                 <p className="text-center text-xs text-slate-400 mt-4">Sudah punya akun? <button type="button" onClick={() => setView('login')} className="text-blue-400 font-bold hover:underline">Masuk</button></p>
                             </form>
                         )}
 
-                        {/* --- KARTU FORM LUPA PASSWORD --- */}
                         {view === 'forgot' && (
                             <form onSubmit={handleForgot} className="space-y-5 animate-fade-in">
                                 <div className="text-center mb-2">
@@ -237,7 +226,7 @@
                                         <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-slate-900/50 border border-slate-700 text-white rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:border-blue-500 transition" placeholder="Masukkan email terdaftar..." />
                                     </div>
                                 </div>
-                                <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition flex items-center justify-center">
+                                <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition">
                                     {loading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : 'Kirim Tautan Reset'}
                                 </button>
                                 <button type="button" onClick={() => setView('login')} className="w-full text-xs font-bold text-slate-400 hover:text-white mt-2 transition">
