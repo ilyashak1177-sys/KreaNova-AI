@@ -52,6 +52,40 @@
 
         const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0);
 
+        // --- SISTEM NOTIFIKASI TELEGRAM ---
+        window.sendTelegramNotification = (userData) => {
+            // GANTI DUA BARIS INI DENGAN DATA ASLI ANDA
+            const botToken = "8891581094:AAEoyvV_4f4OFOL3_cL5pMNAy3q93nd5duo"; // <-- Paste Token Anda di sini
+            const chatId = "8920622995"; // <-- Paste Angka Chat ID Anda di sini
+
+            // JANGAN UBAH KODE DI BAWAH INI
+            if (!botToken || botToken.includes('TOKEN_BOT_TELEGRAM_ANDA')) return;
+            
+            const message = `
+🔔 *PENDAFTAR KREANOVA BARU!* 🔔
+====================
+👤 Nama: ${userData.name}
+📱 No WA: ${userData.phone}
+📧 Email: ${userData.email}
+🤝 Sponsor: ${userData.sponsor}
+📍 Posisi: ${userData.position}
+💰 Tagihan: Rp ${new Intl.NumberFormat('id-ID').format(userData.billAmount)}
+====================
+Silakan cek Panel Admin untuk Aktivasi!`;
+
+            const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: message,
+                    parse_mode: 'Markdown'
+                })
+            }).catch(e => console.error("Gagal kirim Telegram:", e));
+        };
+        // --- AKHIR SISTEM NOTIFIKASI TELEGRAM ---
+
         const KreaNovaLogo = ({ className = "w-12 h-12" }) => (
             <img 
                 src="IMG_20260820_224441.jpg" 
