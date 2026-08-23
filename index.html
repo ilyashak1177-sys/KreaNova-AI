@@ -396,97 +396,244 @@
         };
 
         const NetworkTree = ({ user }) => {
+            const [showModal, setShowModal] = useState(false);
+            const [modalPos, setModalPos] = useState('');
+            const [regName, setRegName] = useState('');
+            const [regPhone, setRegPhone] = useState('');
+            const [regEmail, setRegEmail] = useState('');
+            const [regPass, setRegPass] = useState('');
+            const [showRegPass, setShowRegPass] = useState(false);
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [regMsg, setRegMsg] = useState({ type: '', text: '' });
+
+            const handleRegisterDownline = async (e) => {
+                e.preventDefault();
+                setIsSubmitting(true);
+                setRegMsg({ type: '', text: '' });
+
+                try {
+                    // MENGGUNAKAN REST API AGAR AKUN SPONSOR TIDAK TER-LOGOUT SAAT DAFTARIN ORANG LAIN
+                    const apiKey = window.KreaNovaBackend?.auth?.app?.options?.apiKey || "AIzaSyCWpjChuqzjUe4_foM2gCS4_XoCQE33lHk";
+                    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: regEmail, password: regPass, returnSecureToken: true })
+                    });
+                    
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error.message.replace(/_/g, ' ') || "Gagal mendaftarkan member.");
+
+                    const newUid = data.localId;
+                    const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
+                    const uniqueCode = Math.floor(Math.random() * 900) + 100;
+                    const billAmount = 150000 + uniqueCode;
+
+                    // SIMPAN DATA MEMBER BARU KE DATABASE DENGAN REFERRAL SPONSOR OTOMATIS
+                    const { db, setDoc, doc } = window.KreaNovaBackend;
+                    await setDoc(doc(db, "users", newUid), {
+                        userId: newUid,
+                        name: regName,
+                        email: regEmail,
+                        phone: regPhone,
+                        sponsor: user.referralCode, // OTOMATIS JADI SPONSORNYA
+                        position: modalPos,
+                        referralCode: refCode,
+                        billAmount: billAmount,
+                        walletAvailable: 0,
+                        leftDirects: 0,
+                        rightDirects: 0,
+                        isQualified: false,
+                        bankName: "",
+                        bankAccount: "",
+                        status: "PENDING",
+                        createdAt: new Date().toISOString()
+                    });
+
+                    setRegMsg({ type: 'success', text: `Sukses! ${regName} terdaftar di kaki ${modalPos}.` });
+                    setRegName(''); setRegPhone(''); setRegEmail(''); setRegPass('');
+                    
+                    setTimeout(() => { 
+                        setShowModal(false); 
+                        setRegMsg({ type: '', text: '' }); 
+                    }, 2500);
+
+                } catch (error) {
+                    setRegMsg({ type: 'error', text: error.message });
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
             return (
                 <div className="animate-fade-in pb-10">
                     <h2 className="text-xl font-bold text-white mb-6"><i className="fas fa-sitemap text-yellow-500 mr-2"></i> Pohon Jaringan Anda</h2>
-                    <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-lg mb-6 text-center">
-                        <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-yellow-500 shadow-lg">
-                            <KreaNovaLogo className="w-12 h-12" />
+                    
+                    <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-lg mb-6 flex flex-col items-center relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10"><i className="fas fa-network-wired text-6xl"></i></div>
+                        
+                        {/* AKUN INDUK (ANDA) */}
+                        <div className="bg-slate-800 border-2 border-yellow-500 rounded-full w-16 h-16 flex items-center justify-center z-10 shadow-[0_0_15px_rgba(234,179,8,0.4)] relative">
+                            <i className="fas fa-user-tie text-2xl text-white"></i>
                         </div>
-                        <h3 className="font-bold text-white text-base">{user?.name}</h3>
-                        <p className="text-xs text-yellow-400 font-mono mt-1">ID: {user?.referralCode}</p>
+                        <div className="text-center mt-2 mb-6 z-10">
+                            <p className="font-bold text-white text-base">{user?.name}</p>
+                            <p className="text-[10px] text-yellow-400 font-mono bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/30 mt-1 inline-block">ID: {user?.referralCode}</p>
+                        </div>
+
+                        {/* GARIS PENGHUBUNG KIRI & KANAN */}
+                        <div className="w-full max-w-[200px] h-8 border-t-2 border-l-2 border-r-2 border-slate-600 rounded-t-xl absolute top-[110px] z-0"></div>
+
+                        {/* SLOT KIRI & KANAN */}
+                        <div className="flex justify-between w-full max-w-[280px] z-10 mt-2">
+                            {/* KAKI KIRI */}
+                            <div className="flex flex-col items-center w-[45%]">
+                                <div className="bg-slate-950/80 border border-slate-700 p-4 rounded-xl text-center w-full shadow-lg relative group transition-all hover:border-blue-500/50">
+                                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Tim Kiri</p>
+                                    <p className="text-2xl font-black text-blue-400 mb-1">{user?.leftDirects || 0}</p>
+                                    <p className="text-[9px] text-slate-500 mb-3 block">Anggota Aktif</p>
+                                    <button onClick={() => { setModalPos('KIRI'); setShowModal(true); }} className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/50 text-[10px] font-bold py-2 rounded-lg transition-all flex items-center justify-center shadow-md">
+                                        <i className="fas fa-user-plus mr-1"></i>Isi Kiri
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* KAKI KANAN */}
+                            <div className="flex flex-col items-center w-[45%]">
+                                <div className="bg-slate-950/80 border border-slate-700 p-4 rounded-xl text-center w-full shadow-lg relative group transition-all hover:border-emerald-500/50">
+                                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Tim Kanan</p>
+                                    <p className="text-2xl font-black text-emerald-400 mb-1">{user?.rightDirects || 0}</p>
+                                    <p className="text-[9px] text-slate-500 mb-3 block">Anggota Aktif</p>
+                                    <button onClick={() => { setModalPos('KANAN'); setShowModal(true); }} className="w-full bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/50 text-[10px] font-bold py-2 rounded-lg transition-all flex items-center justify-center shadow-md">
+                                        <i className="fas fa-user-plus mr-1"></i>Isi Kanan
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 text-center">
-                            <p className="text-[10px] text-slate-400 uppercase font-bold mb-2">Tim Kiri</p>
-                            <p className="text-2xl font-black text-blue-400">{user?.leftDirects || 0}</p>
-                            <span className="text-[9px] text-slate-500 mt-1 block">Anggota</span>
+
+                    {/* MODAL PENDAFTARAN DOWNLINE DIRECT */}
+                    {showModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md shadow-2xl relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4">
+                                    <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-red-400 transition"><i className="fas fa-times text-xl"></i></button>
+                                </div>
+                                <h3 className="text-xl font-bold text-white mb-1">Pendaftaran Baru</h3>
+                                <p className="text-xs text-slate-400 mb-6">Mendaftarkan prospek di kaki <span className={`font-bold px-2 py-0.5 rounded ${modalPos === 'KIRI' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{modalPos}</span> Anda.</p>
+
+                                {regMsg.text && (
+                                    <div className={`p-3 rounded-xl mb-4 text-xs text-center border font-bold animate-fade-in ${regMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
+                                        <i className={`fas ${regMsg.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} mr-1`}></i> {regMsg.text}
+                                    </div>
+                                )}
+
+                                <form onSubmit={handleRegisterDownline} className="space-y-3">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Nama Prospek (KTP)</label>
+                                        <input type="text" required value={regName} onChange={(e) => setRegName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-sm focus:border-blue-500 focus:outline-none" placeholder="Masukkan nama..." />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">No. WhatsApp</label>
+                                        <input type="tel" required value={regPhone} onChange={(e) => setRegPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-sm focus:border-blue-500 focus:outline-none" placeholder="0812..." />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Email Aktif</label>
+                                        <input type="email" required value={regEmail} onChange={(e) => setRegEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-sm focus:border-blue-500 focus:outline-none" placeholder="email@gmail.com" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Buat Kata Sandi</label>
+                                        <div className="relative">
+                                            <input type={showRegPass ? "text" : "password"} required value={regPass} onChange={(e) => setRegPass(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 pr-12 text-sm focus:border-blue-500 focus:outline-none" placeholder="Minimal 6 karakter" minLength="6" />
+                                            <button type="button" onClick={() => setShowRegPass(!showRegPass)} className="absolute right-4 top-3.5 text-slate-500 hover:text-white">
+                                                <i className={`fas ${showRegPass ? 'fa-eye-slash text-blue-400' : 'fa-eye'}`}></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <button type="submit" disabled={isSubmitting} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-4 flex justify-center items-center">
+                                        {isSubmitting ? <i className="fas fa-circle-notch fa-spin text-lg"></i> : `Daftarkan di Tim ${modalPos}`}
+                                    </button>
+                                </form>
+                            </div>
                         </div>
-                        <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 text-center">
-                            <p className="text-[10px] text-slate-400 uppercase font-bold mb-2">Tim Kanan</p>
-                            <p className="text-2xl font-black text-emerald-400">{user?.rightDirects || 0}</p>
-                            <span className="text-[9px] text-slate-500 mt-1 block">Anggota</span>
-                        </div>
-                    </div>
+                    )}
                 </div>
             );
         };
 
         const AiStudio = () => {
-            const [menus, setMenus] = useState([]);
-            const [isLoading, setIsLoading] = useState(true);
+            // Data bawaan 10 Menu agar selalu tampil meski database admin masih kosong
+            const defaultMenus = [
+                { id: 1, name: 'Tutorial Penggunaan GenAI', url: '' },
+                { id: 2, name: 'Affiliate Produk', url: '' },
+                { id: 3, name: 'Drama Short', url: '' },
+                { id: 4, name: 'Motivasiku', url: '' },
+                { id: 5, name: 'Qur\'an Overlay', url: '' },
+                { id: 6, name: 'Animal Creature', url: '' },
+                { id: 7, name: 'Animal Human Activity', url: '' },
+                { id: 8, name: 'AI Image Generator', url: '' },
+                { id: 9, name: 'AI Voice Clone', url: '' },
+                { id: 10, name: 'Text to Video AI', url: '' }
+            ];
+
+            const [menus, setMenus] = useState(defaultMenus);
+            const [loading, setLoading] = useState(true);
+            
+            // Ikon dinamis untuk 10 menu
             const menuIcons = ['fa-play-circle', 'fa-shopping-cart', 'fa-film', 'fa-fire', 'fa-book-open', 'fa-paw', 'fa-walking', 'fa-star', 'fa-bolt', 'fa-gem'];
 
             useEffect(() => {
                 const fetchMenus = async () => {
-                    setIsLoading(true);
-                    if (!window.KreaNovaBackend) return;
+                    if(!window.KreaNovaBackend) {
+                        setLoading(false);
+                        return;
+                    }
                     try {
                         const { db, doc, getDoc } = window.KreaNovaBackend;
-                        const linkSnap = await getDoc(doc(db, "settings", "global_links"));
-                        if (linkSnap.exists() && linkSnap.data().mainMenus) {
-                            setMenus(linkSnap.data().mainMenus);
-                        } else {
-                            setMenus([
-                                { id: 1, name: 'Tutorial Penggunaan GenAI', url: '' },
-                                { id: 2, name: 'Affiliate Produk', url: '' },
-                                { id: 3, name: 'Drama Short', url: '' },
-                                { id: 4, name: 'Motivasiku', url: '' },
-                                { id: 5, name: 'Qur\'an Overlay', url: '' },
-                                { id: 6, name: 'Animal Creature', url: '' },
-                                { id: 7, name: 'Animal Human Activity', url: '' }
-                            ]);
+                        const docSnap = await getDoc(doc(db, "settings", "global_links"));
+                        // Jika ada data dari Admin, gunakan data tersebut. Jika kosong, tetap gunakan 10 defaultMenus di atas.
+                        if (docSnap.exists() && docSnap.data().mainMenus && docSnap.data().mainMenus.length > 0) {
+                            setMenus(docSnap.data().mainMenus);
                         }
-                    } catch (error) {
-                        console.error("Gagal memuat menu:", error);
+                    } catch (e) {
+                        console.error("Gagal load menu AI", e);
                     } finally {
-                        setIsLoading(false);
+                        setLoading(false);
                     }
                 };
                 fetchMenus();
             }, []);
 
             return (
-                <div className="animate-fade-in relative pb-10">
-                    <h2 className="text-2xl font-bold text-white mb-6">AI Video Studio</h2>
-                    {isLoading ? (
-                        <div className="flex justify-center items-center py-20">
-                            <i className="fas fa-circle-notch fa-spin text-blue-500 text-3xl"></i>
+                <div className="animate-fade-in pb-10">
+                    <h2 className="text-xl font-bold text-white mb-6"><i className="fas fa-robot text-blue-500 mr-2"></i> AI Studio</h2>
+                    
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                            <i className="fas fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
+                            <p className="text-sm font-medium mt-2">Menyiapkan Modul AI...</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            {menus.map((menu, index) => {
-                                const iconClass = menuIcons[index % menuIcons.length];
+                        <div className="grid grid-cols-2 gap-4">
+                            {menus.map((menu, i) => {
+                                const iconClass = menuIcons[i % menuIcons.length];
                                 const hasUrl = menu.url && menu.url.trim() !== '';
                                 return (
-                                    <a key={menu.id || index} 
-                                       href={hasUrl ? menu.url : '#'} 
-                                       target={hasUrl ? '_blank' : '_self'}
-                                       rel="noopener noreferrer"
-                                       onClick={(e) => {
-                                            if(!hasUrl) {
-                                                e.preventDefault();
-                                                alert('Menu ini belum diaktifkan oleh Admin.');
-                                            }
-                                       }}
-                                       className={`block rounded-2xl p-4 border shadow-lg transition-all ${hasUrl ? 'bg-slate-900 border-slate-800 hover:border-blue-500/50 hover:bg-slate-800/80 cursor-pointer' : 'bg-slate-900/50 border-slate-800/50 opacity-60 cursor-not-allowed'} flex flex-col items-center justify-center text-center aspect-square group relative`}>
+                                    <a key={menu.id || i} 
+                                        href={hasUrl ? menu.url : '#'} 
+                                        target={hasUrl ? "_blank" : "_self"}
+                                        onClick={(e) => { 
+                                            if(!hasUrl) { 
+                                                e.preventDefault(); 
+                                                alert('Sabar ya, menu ini sedang disiapkan oleh Admin.'); 
+                                            } 
+                                        }}
+                                        className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col items-center text-center transition-all hover:bg-slate-800 hover:border-blue-500/50 group shadow-lg">
                                         
-                                        {!hasUrl && <div className="absolute top-2 right-2 text-slate-500 text-xs"><i className="fas fa-lock"></i></div>}
-
-                                        <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 transition-transform ${hasUrl ? 'bg-slate-800 border border-blue-500/20 text-blue-400 group-hover:scale-110' : 'bg-slate-800/50 text-slate-500'}`}>
-                                            <i className={`fas ${iconClass} text-2xl`}></i>
+                                        <div className="w-14 h-14 bg-slate-950 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-inner border border-slate-800 relative">
+                                            {!hasUrl && <div className="absolute -top-1 -right-1 text-red-500 text-xs"><i className="fas fa-lock"></i></div>}
+                                            <i className={`fas ${iconClass} text-2xl text-blue-400 group-hover:text-blue-300`}></i>
                                         </div>
-                                        <h3 className={`font-bold text-xs ${hasUrl ? 'text-slate-200 group-hover:text-white' : 'text-slate-500'}`}>{menu.name}</h3>
+                                        <span className="text-xs font-bold text-slate-300 group-hover:text-white leading-tight">{menu.name || 'Menu AI'}</span>
                                     </a>
                                 );
                             })}
