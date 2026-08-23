@@ -94,143 +94,266 @@
             </div>
         );
 
-        // --- 2. POHON JARINGAN ---
-        const AdminNetworkTree = () => (
-            <div className="animate-fade-in h-full flex flex-col">
-                <h2 className="text-2xl font-bold text-white mb-6"><i className="fas fa-sitemap text-yellow-500 mr-2"></i> Visualisasi Jaringan Binary</h2>
-                <div className="glass-panel flex-1 rounded-2xl shadow-lg p-8 flex items-center justify-center overflow-auto custom-scrollbar">
-                    <div className="flex flex-col items-center">
-                        <div className="tree-node tree-root">
-                            <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(250,204,21,0.5)] border-4 border-yellow-500 z-10">
-                                <img src="IMG_20260820_224441.jpg" alt="Logo" className="w-full h-full rounded-full object-cover" onError={(e) => e.target.style.display='none'} />
-                            </div>
-                            <p className="text-xs font-bold text-yellow-400 mt-2">Master</p>
-                        </div>
-                        <div className="w-full h-8 border-t-2 border-l-2 border-r-2 border-slate-600 rounded-t-xl mx-auto flex justify-between px-16 relative" style={{width: '300px'}}></div>
-                        <div className="flex justify-between w-full" style={{width: '350px'}}>
-                            <div className="tree-node"><div className="w-14 h-14 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg border-4 border-slate-900 z-10 text-white font-bold cursor-pointer hover:scale-110 transition">Kiri</div></div>
-                            <div className="tree-node"><div className="w-14 h-14 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg border-4 border-slate-900 z-10 text-white font-bold cursor-pointer hover:scale-110 transition">Kanan</div></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-
         // --- 3. DATABASE MEMBER ---
         const AdminUsers = ({ showToast }) => {
             const [users, setUsers] = useState([]);
             const [loading, setLoading] = useState(true);
             const [searchQuery, setSearchQuery] = useState("");
+            const [activatingId, setActivatingId] = useState(null);
 
             useEffect(() => { fetchUsers(); }, []);
 
             const fetchUsers = async () => {
-                setLoading(true);
                 if(!window.KreaNovaBackend) return;
+                setLoading(true);
                 try {
                     const { db, collection, getDocs } = window.KreaNovaBackend;
-                    const querySnapshot = await getDocs(collection(db, "users"));
-                    const userList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const snap = await getDocs(collection(db, "users"));
+                    const userList = [];
+                    snap.forEach(doc => userList.push(doc.data()));
+                    userList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
                     setUsers(userList);
-                } catch (error) { console.warn("Pratinjau Offline: Tidak dapat memuat data member."); }
-                setLoading(false);
+                } catch (e) {
+                    console.error(e);
+                    showToast("Gagal mengambil data pengguna.", "error");
+                } finally {
+                    setLoading(false);
+                }
             };
 
-            const handleAction = async (docId, action) => {
-                const { db, doc, updateDoc, deleteDoc, collection, query, where, getDocs, getDoc } = window.KreaNovaBackend;
+            const handleActivate = async (targetUser) => {
+                if(!window.KreaNovaBackend) return;
+                setActivatingId(targetUser.userId);
                 try {
-                    if (action === 'DELETE') {
-                        if(confirm('Data akan hangus. Lanjutkan?')) { await deleteDoc(doc(db, "users", docId)); showToast('Member dihapus permanen!', 'success'); }
-                    } else if (action === 'ACTIVE') {
-                        // AMBIL DATA MEMBER YANG MAU DIAKTIFKAN
-                        const userRef = doc(db, "users", docId);
-                        const userSnap = await getDoc(userRef);
+                    const { db, doc, updateDoc, getDocs, collection, query, where } = window.KreaNovaBackend;
+                    
+                    // 1. Aktifkan akun member
+                    await updateDoc(doc(db, "users", targetUser.userId), {
+                        status: 'ACTIVE'
+                    });
+
+                    // 2. Cari Sponsor untuk membagikan bonus
+                    if (targetUser.sponsor && targetUser.sponsor !== 'KREANOVA') {
+                        const qSponsor = query(collection(db, "users"), where("referralCode", "==", targetUser.sponsor));
+                        const sponsorSnap = await getDocs(qSponsor);
                         
-                        if(userSnap.exists()) {
-                            const userData = userSnap.data();
+                        if (!sponsorSnap.empty) {
+                            const sponsorDoc = sponsorSnap.docs[0];
+                            const sponsorData = sponsorDoc.data();
                             
-                            if (userData.status !== 'ACTIVE') {
-                                // 1. Ubah status member menjadi aktif
-                                await updateDoc(userRef, { status: "ACTIVE" });
-                                
-                                // 2. EKSEKUSI PEMBAGIAN BONUS KE SPONSOR
-                                if (userData.sponsor) {
-                                    // Cari akun Sponsor berdasarkan Kode Referral-nya
-                                    const usersCol = collection(db, "users");
-                                    const q = query(usersCol, where("referralCode", "==", userData.sponsor));
-                                    const sponsorSnaps = await getDocs(q);
-                                    
-                                    if (!sponsorSnaps.empty) {
-                                        const sponsorDoc = sponsorSnaps.docs[0];
-                                        const sponsorData = sponsorDoc.data();
-                                        const sponsorRef = doc(db, "users", sponsorDoc.id);
+                            let newWallet = (sponsorData.walletAvailable || 0) + 40000;
+                            let newLeftDirects = sponsorData.leftDirects || 0;
+                            let newRightDirects = sponsorData.rightDirects || 0;
 
-                                        // Tambah Bonus Sponsor (Rp 40.000)
-                                        let newWallet = (sponsorData.walletAvailable || 0) + 40000;
-                                        let leftCount = sponsorData.leftDirects || 0;
-                                        let rightCount = sponsorData.rightDirects || 0;
-                                        let isQual = sponsorData.isQualified || false;
+                            if (targetUser.position === 'KIRI') newLeftDirects += 1;
+                            if (targetUser.position === 'KANAN') newRightDirects += 1;
 
-                                        // Hitung penempatan langsung (Kiri/Kanan)
-                                        if (userData.position === 'KIRI') leftCount++;
-                                        if (userData.position === 'KANAN') rightCount++;
+                            let qualified = sponsorData.isQualified || false;
 
-                                        // Cek Bonus Qualified Rp 50.000 (Jika 10 Kiri & 10 Kanan)
-                                        if (leftCount >= 10 && rightCount >= 10 && !isQual) {
-                                            newWallet += 50000; // Bonus Qualified Masuk
-                                            isQual = true;      // Tandai sudah qualified agar tidak turun dobel
-                                        }
-
-                                        // Simpan dompet dan status terbaru milik Sponsor
-                                        await updateDoc(sponsorRef, {
-                                            walletAvailable: newWallet,
-                                            leftDirects: leftCount,
-                                            rightDirects: rightCount,
-                                            isQualified: isQual
-                                        });
-                                    }
-                                }
-                                showToast('Akun Aktif & Bonus Disalurkan!', 'success');
-                            } else {
-                                showToast('Akun ini sudah aktif!', 'error');
+                            // Cek syarat Qualified
+                            if (!qualified && newLeftDirects >= 10 && newRightDirects >= 10) {
+                                newWallet += 50000;
+                                qualified = true;
+                                showToast(`Bonus Qualified Rp50.000 cair ke sponsor ${sponsorData.name}!`, 'success');
                             }
+
+                            await updateDoc(doc(db, "users", sponsorData.userId), {
+                                walletAvailable: newWallet,
+                                leftDirects: newLeftDirects,
+                                rightDirects: newRightDirects,
+                                isQualified: qualified
+                            });
                         }
-                    } else if (action === 'LOCK') {
-                        await updateDoc(doc(db, "users", docId), { status: "LOCKED" }); showToast('Akun dikunci demi keamanan.', 'error');
                     }
+                    showToast(`Akun ${targetUser.name} berhasil diaktifkan!`, "success");
                     fetchUsers();
-                } catch (e) { showToast("Gagal: " + e.message, 'error'); }
+                } catch (e) {
+                    console.error(e);
+                    showToast("Gagal aktivasi: " + e.message, "error");
+                } finally {
+                    setActivatingId(null);
+                }
             };
 
-            const filteredUsers = users.filter(u => (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()));
+            const filteredUsers = users.filter(u => u.name?.toLowerCase().includes(searchQuery.toLowerCase()) || u.referralCode?.toLowerCase().includes(searchQuery.toLowerCase()));
 
             return (
-                <div className="animate-fade-in">
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                        <h2 className="text-2xl font-bold text-white"><i className="fas fa-users-cog text-blue-500 mr-2"></i> Database Member</h2>
-                        <div className="relative w-full md:w-64"><i className="fas fa-search absolute left-3 top-3 text-slate-500"></i><input type="text" placeholder="Cari nama/email..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-900 border border-slate-700 text-white rounded-full py-2 pl-10 pr-4 focus:outline-none focus:border-blue-500" /></div>
+                <div className="animate-fade-in space-y-6 pb-10">
+                    <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white mb-1"><i className="fas fa-users-cog text-blue-500 mr-2"></i> Database Member</h2>
+                            <p className="text-sm text-slate-400">Kelola pendaftaran, aktivasi, dan jaringan pengguna.</p>
+                        </div>
+                        <div className="relative">
+                            <i className="fas fa-search absolute left-3 top-3.5 text-slate-500"></i>
+                            <input type="text" placeholder="Cari nama / ID..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full md:w-64 bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl pl-10 pr-4 py-3 text-sm text-white outline-none transition" />
+                        </div>
                     </div>
-                    <div className="glass-panel rounded-2xl shadow-lg overflow-hidden custom-scrollbar overflow-x-auto">
-                        <table className="w-full text-left text-sm text-slate-300 min-w-[900px]">
-                            <thead className="bg-slate-900/80 border-b border-slate-700 text-xs uppercase text-slate-400 font-bold tracking-wider">
-                                <tr><th className="px-6 py-5">Profil</th><th className="px-6 py-5">Kontak</th><th className="px-6 py-5">Bank (WD)</th><th className="px-6 py-5 text-center">Status</th><th className="px-6 py-5 text-center">Aksi</th></tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800">
-                                {loading ? (<tr><td colSpan="5" className="text-center py-16"><i className="fas fa-circle-notch fa-spin text-blue-500 text-3xl mb-3"></i><p>Sinkronisasi Database...</p></td></tr>) : filteredUsers.length === 0 ? (<tr><td colSpan="5" className="text-center py-16 text-slate-500">Tidak ada data.</td></tr>) : filteredUsers.map((u) => (
-                                    <tr key={u.id} className="hover:bg-slate-800/30 transition group">
-                                        <td className="px-6 py-4"><div className="font-bold text-white">{u.name || 'N/A'}</div><div className="text-xs text-slate-400">{u.email || 'N/A'}</div></td>
-                                        <td className="px-6 py-4"><div className="text-emerald-400 font-mono text-sm">{u.phone || 'N/A'}</div><div className="text-[10px] text-slate-500">Sponsor: {u.sponsor || 'KREANOVA'}</div></td>
-                                        <td className="px-6 py-4"><div className="text-sm font-bold text-yellow-500">{u.bankName || 'Belum diatur'}</div><div className="text-xs font-mono text-slate-300">{u.bankAccount || '-'}</div></td>
-                                        <td className="px-6 py-4 text-center"><span className="px-3 py-1.5 rounded-full text-xs font-bold border bg-slate-800 text-white">{u.status || 'PENDING'}</span></td>
-                                        <td className="px-6 py-4"><div className="flex justify-center gap-2">
-                                            {u.status !== 'ACTIVE' && <button onClick={() => handleAction(u.id, 'ACTIVE')} className="bg-emerald-600 hover:bg-emerald-500 text-white w-8 h-8 rounded-full tooltip" title="Aktifkan"><i className="fas fa-check"></i></button>}
-                                            {u.status === 'ACTIVE' && <button onClick={() => handleAction(u.id, 'LOCK')} className="bg-orange-600 hover:bg-orange-500 text-white w-8 h-8 rounded-full tooltip" title="Kunci"><i className="fas fa-lock"></i></button>}
-                                            <button onClick={() => handleAction(u.id, 'DELETE')} className="bg-red-600 hover:bg-red-500 text-white w-8 h-8 rounded-full tooltip" title="Hapus"><i className="fas fa-trash"></i></button>
-                                        </div></td>
+
+                    <div className="glass-panel rounded-2xl shadow-lg border-t-4 border-t-blue-500 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-900/80 border-b border-slate-700/50 text-xs uppercase tracking-wider text-slate-400 font-bold">
+                                        <th className="p-4">Member</th>
+                                        <th className="p-4 text-center">Sponsor & Posisi</th>
+                                        <th className="p-4 text-center">Tagihan (Rp)</th>
+                                        <th className="p-4 text-center">Status</th>
+                                        <th className="p-4 text-center">Aksi</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/50">
+                                    {loading ? (
+                                        <tr><td colSpan="5" className="p-8 text-center text-slate-500"><i className="fas fa-circle-notch fa-spin text-2xl mb-2"></i><p>Memuat database...</p></td></tr>
+                                    ) : filteredUsers.length === 0 ? (
+                                        <tr><td colSpan="5" className="p-8 text-center text-slate-500"><i className="fas fa-folder-open text-2xl mb-2"></i><p>Belum ada data member ditemukan.</p></td></tr>
+                                    ) : filteredUsers.map((u, i) => (
+                                        <tr key={i} className="hover:bg-slate-800/30 transition-colors">
+                                            <td className="p-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-blue-400"><i className="fas fa-user"></i></div>
+                                                    <div>
+                                                        <p className="text-sm font-bold text-white">{u.name}</p>
+                                                        <p className="text-[10px] font-mono text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20 inline-block mt-1">ID: {u.referralCode}</p>
+                                                        <p className="text-xs text-slate-400">{u.email}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <p className="text-xs font-mono text-slate-300">{u.sponsor || '-'}</p>
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded mt-1 inline-block ${u.position === 'KIRI' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{u.position}</span>
+                                            </td>
+                                            <td className="p-4 text-center font-mono text-sm text-slate-300">{new Intl.NumberFormat('id-ID').format(u.billAmount || 0)}</td>
+                                            <td className="p-4 text-center">
+                                                {u.status === 'ACTIVE' ? (
+                                                    <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-[10px] font-bold"><i className="fas fa-check mr-1"></i> AKTIF</span>
+                                                ) : (
+                                                    <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-3 py-1 rounded-full text-[10px] font-bold"><i className="fas fa-clock mr-1"></i> PENDING</span>
+                                                )}
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                {u.status !== 'ACTIVE' ? (
+                                                    <button onClick={() => handleActivate(u)} disabled={activatingId === u.userId} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-lg transition flex items-center justify-center mx-auto min-w-[100px]">
+                                                        {activatingId === u.userId ? <i className="fas fa-spinner fa-spin"></i> : "Aktifkan"}
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-slate-500 text-xs"><i className="fas fa-check-double text-emerald-500"></i> Selesai</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- POHON JARINGAN ---
+        const AdminNetworkTree = () => {
+            const [allUsers, setAllUsers] = useState([]);
+            const [viewRoot, setViewRoot] = useState({ name: 'Perusahaan (Master)', referralCode: 'KREANOVA' });
+            const [history, setHistory] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                const fetchAll = async () => {
+                    if(!window.KreaNovaBackend) return;
+                    try {
+                        const { db, collection, getDocs } = window.KreaNovaBackend;
+                        const snap = await getDocs(collection(db, "users"));
+                        const users = [];
+                        snap.forEach(d => users.push(d.data()));
+                        setAllUsers(users);
+                    } catch (e) {
+                        console.error(e);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+                fetchAll();
+            }, []);
+
+            const leftNode = allUsers.find(u => (u.upline || u.sponsor) === viewRoot.referralCode && u.position === 'KIRI' && u.status === 'ACTIVE');
+            const rightNode = allUsers.find(u => (u.upline || u.sponsor) === viewRoot.referralCode && u.position === 'KANAN' && u.status === 'ACTIVE');
+
+            const handleDrillDown = (node) => {
+                if (!node) return;
+                setHistory([...history, viewRoot]);
+                setViewRoot(node);
+            };
+
+            const handleGoUp = () => {
+                if (history.length === 0) return;
+                const newHist = [...history];
+                const prev = newHist.pop();
+                setHistory(newHist);
+                setViewRoot(prev);
+            };
+
+            const renderNode = (nodeData, position) => {
+                if (loading) {
+                    return <div className="w-[45%] text-center py-4"><i className="fas fa-circle-notch fa-spin text-slate-500"></i></div>;
+                }
+                
+                if (nodeData) {
+                    return (
+                        <div className="flex flex-col items-center w-[45%] cursor-pointer group" onClick={() => handleDrillDown(nodeData)}>
+                            <div className="w-0.5 h-6 bg-slate-600 mb-0"></div>
+                            <div className="bg-slate-800/80 border-2 border-emerald-500/50 p-4 rounded-xl w-full text-center hover:bg-slate-700 hover:scale-105 transition shadow-lg relative">
+                                <div className="w-8 h-8 mx-auto bg-emerald-600 rounded-full flex items-center justify-center mb-2 shadow-inner">
+                                    <i className="fas fa-user text-white text-xs"></i>
+                                </div>
+                                <p className="text-xs text-white font-bold truncate">{nodeData.name}</p>
+                                <p className="text-[10px] text-emerald-400 font-mono mt-1">ID: {nodeData.referralCode}</p>
+                            </div>
+                            <div className="w-16 h-4 border-t border-l border-r border-slate-700 mt-0 opacity-50"></div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="flex flex-col items-center w-[45%]">
+                        <div className="w-0.5 h-6 bg-slate-600 mb-0"></div>
+                        <div className="bg-slate-900/50 border border-slate-700 border-dashed p-4 rounded-xl text-center w-full shadow-lg relative">
+                            <p className="text-xs text-slate-500 uppercase font-bold py-4">Tim {position}<br/>(Kosong)</p>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="animate-fade-in h-full flex flex-col">
+                    <h2 className="text-2xl font-bold text-white mb-6"><i className="fas fa-sitemap text-yellow-500 mr-2"></i> Visualisasi Jaringan Binary</h2>
+                    <div className="glass-panel flex-1 rounded-2xl shadow-lg p-8 flex flex-col items-center justify-start overflow-auto custom-scrollbar relative">
+                        
+                        {history.length > 0 && (
+                            <button onClick={handleGoUp} className="absolute top-8 left-8 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-bold shadow-md transition flex items-center">
+                                <i className="fas fa-arrow-up mr-2"></i> Kembali Naik
+                            </button>
+                        )}
+
+                        <div className="flex flex-col items-center mt-4">
+                            <div className="tree-node tree-root">
+                                <div className={`w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(250,204,21,0.5)] border-4 ${history.length > 0 ? 'border-blue-500' : 'border-yellow-500'} z-10`}>
+                                    {history.length === 0 ? (
+                                        <img src="IMG_20260820_224441.jpg" alt="Logo" className="w-full h-full rounded-full object-cover" onError={(e) => e.target.style.display='none'} />
+                                    ) : (
+                                        <i className="fas fa-user-tie text-3xl text-white"></i>
+                                    )}
+                                </div>
+                                <p className="text-sm font-bold text-white mt-3">{viewRoot.name}</p>
+                                <p className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded border border-yellow-500/30 mt-1">ID: {viewRoot.referralCode}</p>
+                            </div>
+                            
+                            <div className="w-full h-10 border-t-2 border-l-2 border-r-2 border-slate-600 rounded-t-xl mx-auto flex justify-between px-16 relative mt-2" style={{width: '380px'}}></div>
+                            
+                            <div className="flex justify-between w-full" style={{width: '450px'}}>
+                                {renderNode(leftNode, 'KIRI')}
+                                {renderNode(rightNode, 'KANAN')}
+                            </div>
+                        </div>
                     </div>
                 </div>
             );
