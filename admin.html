@@ -426,6 +426,7 @@
         const AdminLinks = ({ showToast }) => {
             const [isSaving, setIsSaving] = useState(false);
             const [tripayLink, setTripayLink] = useState('');
+            const [bannerLink, setBannerLink] = useState('');
             const [mainMenus, setMainMenus] = useState([
                 { id: 1, name: 'Tutorial Penggunaan GenAI', url: '' },
                 { id: 2, name: 'Affiliate Produk', url: '' },
@@ -447,9 +448,8 @@
                             if (data.mainMenus && Array.isArray(data.mainMenus) && data.mainMenus.length > 0) {
                                 setMainMenus(data.mainMenus);
                             }
-                            if (data.tripayLink) {
-                                setTripayLink(data.tripayLink);
-                            }
+                            if (data.tripayLink) setTripayLink(data.tripayLink);
+                            if (data.bannerLink) setBannerLink(data.bannerLink);
                         }
                     } catch (e) { console.warn("Pratinjau Offline: Memuat tautan bawaan."); }
                 };
@@ -475,12 +475,12 @@
                 if(!window.KreaNovaBackend) { showToast('Gagal terhubung ke Firebase', 'error'); setIsSaving(false); return; }
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
-                    // Menyimpan data Menu dan Tripay ke Database
                     await setDoc(doc(db, "settings", "global_links"), { 
                         mainMenus,
-                        tripayLink 
+                        tripayLink,
+                        bannerLink
                     });
-                    showToast('Sukses! Semua link & Tripay berhasil di-deploy.', 'success');
+                    showToast('Sukses! Semua link & Banner berhasil di-deploy.', 'success');
                 } catch (e) { showToast('Gagal menyimpan: ' + e.message, 'error'); }
                 setIsSaving(false);
             };
@@ -498,8 +498,28 @@
                         </button>
                     </div>
 
+                    {/* KARTU BANNER POPUP TENGAH */}
+                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-yellow-500">
+                        <h3 className="text-xl font-bold text-white mb-4 flex items-center border-b border-slate-700/50 pb-4">
+                            <i className="fas fa-image text-yellow-400 mr-3"></i> Banner Pop-up (Logo Tengah)
+                        </h3>
+                        <div className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 transition-all hover:border-yellow-500/50 shadow-sm relative overflow-hidden">
+                            <div className="mb-2 relative z-10">
+                                <label className="text-xs font-bold text-yellow-400 uppercase tracking-wider block mb-1">Link URL Gambar Banner</label>
+                                <p className="text-[10px] text-slate-400 mb-4">Tempel link gambar (JPG/PNG). Gambar ini akan muncul sebagai pop-up saat member menekan logo KreaNova di tengah navigasi bawah.</p>
+                                <input 
+                                    type="text" 
+                                    value={bannerLink} 
+                                    onChange={(e) => setBannerLink(e.target.value)} 
+                                    placeholder="https://contoh.com/banner-promo.jpg" 
+                                    className="w-full bg-slate-950 border border-slate-700 focus:border-yellow-500 rounded-lg p-3 text-sm text-white outline-none transition" 
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* KARTU TRIPAY PAYMENT GATEWAY */}
-                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-blue-500">
+                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-blue-500 mt-6">
                         <h3 className="text-xl font-bold text-white mb-4 flex items-center border-b border-slate-700/50 pb-4">
                             <i className="fas fa-credit-card text-blue-400 mr-3"></i> Payment Gateway (Tripay)
                         </h3>
@@ -520,7 +540,7 @@
                     </div>
 
                     {/* KARTU MENU UTAMA */}
-                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-emerald-500">
+                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-emerald-500 mt-6">
                         <h3 className="text-xl font-bold text-white mb-6 flex items-center justify-between border-b border-slate-700/50 pb-4">
                             <div><i className="fas fa-th-list text-emerald-400 mr-2"></i> 10 Menu Utama KreaNova AI</div>
                             <span className="bg-emerald-500/20 text-emerald-400 text-xs px-3 py-1 rounded-full font-bold">{mainMenus.length} Slot Aktif</span>
