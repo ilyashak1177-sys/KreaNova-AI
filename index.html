@@ -14,7 +14,9 @@
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #020617; color: #cbd5e1; margin: 0; padding: 0; overflow: hidden; -webkit-tap-highlight-color: transparent; }
         .custom-scrollbar::-webkit-scrollbar { width: 0px; height: 0px; }
         .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        .animate-slide-up { animation: slideUp 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
     </style>
 </head>
@@ -352,9 +354,19 @@ Silakan cek Panel Admin untuk Aktivasi!`;
         const Dashboard = ({ user }) => {
             const [copied, setCopied] = useState(false);
             
+            // Kunci link permanen ke Vercel agar selalu rapi
             const fullLink = `https://krea-nova-ai.vercel.app/?ref=${user?.referralCode || ''}`;
             
-            const shareText = `🚀 *Peluang Emas Bersama KreaNova AI!*\n\nHalo, mari manfaatkan teknologi Kecerdasan Buatan (AI) untuk memaksimalkan potensi digital dan finansial Anda.\n\n✅ Modul AI Premium Lengkap\n✅ Bonus Jaringan & Qualified\n✅ Komunitas Terverifikasi\n\nSegera daftar dan amankan posisi Anda melalui tautan resmi pendaftaran di bawah ini:\n${fullLink}`;
+            const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!
+
+Dapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.
+
+✅ Modul AI Lengkap
+✅ Komunitas Solid
+✅ Potensi Income Tanpa Batas
+
+Daftar sekarang melalui link resmi:
+${fullLink}`;
 
             const handleCopy = () => {
                 if (navigator.clipboard && window.isSecureContext) {
@@ -382,9 +394,8 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
             const handleShare = () => {
                 if (navigator.share) {
-                    navigator.share({
-                        text: shareText
-                    }).catch(console.error);
+                    // Hanya membagikan text murni tanpa title atau url parameter agar tidak kotor di WhatsApp
+                    navigator.share({ text: shareText }).catch(console.error);
                 }
             };
 
@@ -494,25 +505,30 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [regMsg, setRegMsg] = useState({ type: '', text: '' });
 
-            useEffect(() => {
-                const fetchTree = async () => {
-                    if (!window.KreaNovaBackend || !viewRoot) return;
-                    setLoadingTree(true);
-                    setLeftNode(null); setRightNode(null);
-                    try {
-                        const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
-                        const q = query(collection(db, "users"), where("upline", "==", viewRoot.referralCode), where("status", "==", "ACTIVE"));
-                        const snap = await getDocs(q);
-                        snap.forEach(doc => {
-                            const data = doc.data();
-                            if (data.position === 'KIRI') setLeftNode(data);
-                            if (data.position === 'KANAN') setRightNode(data);
-                        });
-                    } catch (e) { console.error("Error tree:", e); }
-                    setLoadingTree(false);
-                };
-                fetchTree();
+            const fetchTree = useCallback(async () => {
+                if (!window.KreaNovaBackend || !viewRoot) return;
+                setLoadingTree(true);
+                setLeftNode(null); setRightNode(null);
+                try {
+                    const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
+                    // Menarik semua downline (termasuk PENDING) berdasarkan ID upline yang sedang dilihat
+                    const q = query(collection(db, "users"), where("upline", "==", viewRoot.referralCode));
+                    const snap = await getDocs(q);
+                    let lNode = null, rNode = null;
+                    snap.forEach(doc => {
+                        const data = doc.data();
+                        if (data.position === 'KIRI') lNode = data;
+                        if (data.position === 'KANAN') rNode = data;
+                    });
+                    setLeftNode(lNode);
+                    setRightNode(rNode);
+                } catch (e) { console.error("Error tree:", e); }
+                setLoadingTree(false);
             }, [viewRoot]);
+
+            useEffect(() => {
+                fetchTree();
+            }, [fetchTree]);
 
             const handleDrillDown = (nodeData) => {
                 if(!nodeData) return;
@@ -556,6 +572,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     }
 
                     setRegMsg({ type: 'success', text: `Sukses! ${regName} terdaftar di kaki ${modalPos}.` });
+                    fetchTree(); 
                     setRegName(''); setRegPhone(''); setRegEmail(''); setRegPass('');
                     setTimeout(() => { setShowModal(false); setRegMsg({type:'', text:''}); }, 2500);
                 } catch (error) {
@@ -570,18 +587,22 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     <div className="flex flex-col items-center w-[45%]"><div className="bg-slate-900/50 border border-slate-800 p-4 rounded-xl text-center w-full h-[100px] flex items-center justify-center"><i className="fas fa-spinner fa-spin text-slate-500"></i></div></div>
                 );
 
-                if (nodeData) return (
-                    <div className="flex flex-col items-center w-[45%] relative cursor-pointer group" onClick={() => handleDrillDown(nodeData)}>
-                        <div className="w-0.5 h-4 bg-slate-600 mb-0"></div>
-                        <div className={`bg-slate-950/80 border-2 border-${posColor}-500/50 p-3 rounded-xl text-center w-full shadow-lg relative transition-all group-hover:scale-105 group-hover:border-${posColor}-400`}>
-                            <div className={`w-8 h-8 mx-auto bg-${posColor}-600 rounded-full flex items-center justify-center mb-2 shadow-inner border border-${posColor}-400`}><i className="fas fa-user text-white text-xs"></i></div>
-                            <p className="text-[10px] text-white font-bold truncate max-w-full" title={nodeData.name}>{nodeData.name}</p>
-                            <p className={`text-[8px] text-${posColor}-400 font-mono mt-0.5`}>ID: {nodeData.referralCode}</p>
-                            <div className="mt-2 pt-2 border-t border-slate-800 text-[8px] text-slate-400 group-hover:text-white transition-colors"><i className="fas fa-sitemap mr-1"></i> Lihat Tim</div>
+                if (nodeData) {
+                    const isPending = nodeData.status === 'PENDING';
+                    return (
+                        <div className="flex flex-col items-center w-[45%] relative cursor-pointer group" onClick={() => handleDrillDown(nodeData)}>
+                            <div className="w-0.5 h-4 bg-slate-600 mb-0"></div>
+                            <div className={`bg-slate-950/80 border-2 ${isPending ? 'border-amber-500/50 group-hover:border-amber-400' : `border-${posColor}-500/50 group-hover:border-${posColor}-400`} p-3 rounded-xl text-center w-full shadow-lg relative transition-all group-hover:scale-105`}>
+                                {isPending && <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full z-10 border border-slate-900 shadow-sm">PENDING</span>}
+                                <div className={`w-8 h-8 mx-auto ${isPending ? 'bg-amber-600 border-amber-400' : `bg-${posColor}-600 border-${posColor}-400`} rounded-full flex items-center justify-center mb-2 shadow-inner border`}><i className="fas fa-user text-white text-xs"></i></div>
+                                <p className="text-[10px] text-white font-bold truncate max-w-full" title={nodeData.name}>{nodeData.name}</p>
+                                <p className={`text-[8px] ${isPending ? 'text-amber-400' : `text-${posColor}-400`} font-mono mt-0.5`}>ID: {nodeData.referralCode}</p>
+                                <div className="mt-2 pt-2 border-t border-slate-800 text-[8px] text-slate-400 group-hover:text-white transition-colors"><i className="fas fa-sitemap mr-1"></i> Lihat Tim</div>
+                            </div>
+                            <div className="w-16 h-4 border-t border-l border-r border-slate-700 mt-0 opacity-50"></div>
                         </div>
-                        <div className="w-16 h-4 border-t border-l border-r border-slate-700 mt-0 opacity-50"></div>
-                    </div>
-                );
+                    )
+                };
 
                 return (
                     <div className="flex flex-col items-center w-[45%]">
@@ -874,7 +895,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                             <div className="w-[60px] h-[60px] bg-gradient-to-b from-[#d4af37] to-yellow-600 rounded-full p-0.5 shadow-[0_5px_15px_rgba(212,175,55,0.4)] flex items-center justify-center">
                                 <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center overflow-hidden border-[3px] border-slate-900">
                                     <img 
-                                        src="IMG_20260820_224441_2.jpg" 
+                                        src="IMG_20260820_224441.jpg" 
                                         alt="KreaNova Logo" 
                                         className="w-full h-full object-cover"
                                         onError={(e) => {
