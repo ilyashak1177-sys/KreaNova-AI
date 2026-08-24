@@ -345,8 +345,12 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
         const Dashboard = ({ user }) => {
             const [copied, setCopied] = useState(false);
-            const fullLink = `${window.location.origin}/?ref=${user?.referralCode || ''}`;
-            const shareText = encodeURIComponent(`Halo! Mari bergabung dengan KreaNova AI, platform cerdas untuk solusi digital Anda. Daftar menggunakan link rujukan saya di bawah ini:\n\n${fullLink}`);
+            
+            // KODE DIPERBAIKI: Mengunci domain ke Vercel agar link selalu rapi dan pendek
+            const fullLink = `https://krea-nova-ai.vercel.app/?ref=${user?.referralCode || ''}`;
+            
+            // Teks promosi disatukan langsung dengan link agar tidak ada judul tambahan (Header) dari sistem HP yang mengganggu
+            const shareText = `🚀 *Peluang Emas Bersama KreaNova AI!*\n\nHalo, mari manfaatkan teknologi Kecerdasan Buatan (AI) untuk memaksimalkan potensi digital dan finansial Anda.\n\n✅ Modul AI Premium Lengkap\n✅ Bonus Jaringan & Qualified\n✅ Komunitas Terverifikasi\n\nSegera daftar dan amankan posisi Anda melalui tautan resmi pendaftaran di bawah ini:\n${fullLink}`;
 
             const handleCopy = () => {
                 if (navigator.clipboard && window.isSecureContext) {
@@ -375,9 +379,8 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const handleShare = () => {
                 if (navigator.share) {
                     navigator.share({
-                        title: 'Undangan KreaNova AI',
-                        text: shareText,
-                        url: fullLink
+                        // Hanya mengirimkan parameter 'text'. Parameter 'title' dan 'url' dihapus agar teks kepala mengganggu hilang.
+                        text: shareText
                     }).catch(console.error);
                 }
             };
