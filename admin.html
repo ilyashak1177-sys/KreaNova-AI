@@ -413,16 +413,36 @@
                 }
             };
 
-            // Delete Handler
+            // --- FITUR HAPUS DENGAN KOMPENSASI NAIK POSISI ---
             const handleDelete = async (user) => {
+                // Jangan gunakan alert/confirm sesuai pedoman mutlak. Langsung proses.
                 try {
-                    const { db, doc, deleteDoc } = window.KreaNovaBackend;
+                    const { db, doc, deleteDoc, updateDoc, collection, query, where, getDocs } = window.KreaNovaBackend;
+                    
+                    // 1. Cari anak (downline langsung) dari user yang akan dihapus
+                    const qDownline = query(collection(db, "users"), where("upline", "==", user.referralCode));
+                    const snapDownline = await getDocs(qDownline);
+                    
+                    // 2. Jika punya anak, naikkan posisi anak tersebut ke upline dari user yang dihapus
+                    if (!snapDownline.empty) {
+                        const newUplineCode = user.upline; // Upline dari orang yang dihapus
+                        const promises = [];
+                        snapDownline.forEach((downDoc) => {
+                            // Mengubah ID Upline sang anak menjadi ID Upline sang kakek
+                            promises.push(updateDoc(doc(db, "users", downDoc.id), { upline: newUplineCode }));
+                        });
+                        await Promise.all(promises);
+                        console.log(`${snapDownline.size} downline dari ${user.name} ditarik naik ke ${newUplineCode}.`);
+                    }
+
+                    // 3. Hapus akun pengguna tersebut
                     await deleteDoc(doc(db, "users", user.id));
-                    showToast(`Akun ${user.name} berhasil DIHAPUS dari sistem!`, 'success');
+                    showToast(`Akun ${user.name} DIHAPUS. Jaringan di bawahnya telah ditarik naik.`, 'success');
                 } catch (e) {
                     showToast("Gagal menghapus: " + e.message, 'error');
                 }
             };
+            // ------------------------------------------------
 
             const filteredUsers = users.filter(u => 
                 (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
