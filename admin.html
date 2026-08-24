@@ -73,42 +73,40 @@
         };
 
         const DashboardOverview = () => {
-            const [stats, setStats] = useState({
-                totalMembers: 0,
-                activeMembers: 0,
-                revenue: 0,
-                pendingWD: 0
-            });
+            const [stats, setStats] = useState({ totalMembers: 0, activeMembers: 0, revenue: 0, pendingWD: 0 });
             const [loading, setLoading] = useState(true);
 
             useEffect(() => {
                 if (!window.KreaNovaBackend) return;
-                const { db, collection, onSnapshot } = window.KreaNovaBackend;
+                const { db, collection, onSnapshot, doc, deleteDoc } = window.KreaNovaBackend;
 
                 const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
                     let total = snapshot.size;
                     let active = 0;
                     let rev = 0;
+                    const now = new Date().getTime();
 
                     snapshot.forEach(docSnap => {
                         const data = docSnap.data();
+                        
+                        // SWEEPER 24 JAM: Hapus otomatis jika Pending > 24 Jam
+                        if (data.status === 'PENDING' && data.createdAt) {
+                            const createdTime = new Date(data.createdAt).getTime();
+                            if (now - createdTime > 86400000) {
+                                deleteDoc(doc(db, "users", docSnap.id)).catch(e => console.error("Auto-delete error:", e));
+                                return; // Lompati perhitungan statistik untuk akun ini
+                            }
+                        }
+
                         if (data.status === 'ACTIVE') {
                             active += 1;
                             rev += (data.billAmount || 150000);
                         }
                     });
 
-                    setStats({
-                        totalMembers: total,
-                        activeMembers: active,
-                        revenue: rev,
-                        pendingWD: 0
-                    });
+                    setStats({ totalMembers: total, activeMembers: active, revenue: rev, pendingWD: 0 });
                     setLoading(false);
-                }, (err) => {
-                    console.error("Error loading dashboard stats:", err);
-                    setLoading(false);
-                });
+                }, (err) => { console.error(err); setLoading(false); });
 
                 return () => unsub();
             }, []);
@@ -196,14 +194,12 @@
                 try {
                     const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
                     
-                    // Fetch Root User
                     const qRoot = query(collection(db, "users"), where("referralCode", "==", refCode));
                     const snapRoot = await getDocs(qRoot);
                     let rootUser = null;
                     snapRoot.forEach(docSnap => { rootUser = docSnap.data(); });
 
-                    let leftUser = null;
-                    let rightUser = null;
+                    let leftUser = null, rightUser = null;
 
                     if (rootUser) {
                         const qDown = query(collection(db, "users"), where("upline", "==", refCode));
@@ -216,38 +212,15 @@
                     }
 
                     setTreeData({ root: rootUser, left: leftUser, right: rightUser });
-                } catch (e) {
-                    console.error("Error fetching tree:", e);
-                } finally {
-                    setLoading(false);
-                }
+                } catch (e) { console.error("Error fetching tree:", e); } 
+                finally { setLoading(false); }
             }, []);
 
-            useEffect(() => {
-                fetchNode(rootRef);
-            }, [rootRef, fetchNode]);
+            useEffect(() => { fetchNode(rootRef); }, [rootRef, fetchNode]);
 
-            const handleDrillDown = (user) => {
-                if (!user) return;
-                setHistory(prev => [...prev, rootRef]);
-                setRootRef(user.referralCode);
-            };
-
-            const handleGoUp = () => {
-                if (history.length === 0) return;
-                const newHistory = [...history];
-                const prev = newHistory.pop();
-                setHistory(newHistory);
-                setRootRef(prev);
-            };
-
-            const handleSearchSubmit = (e) => {
-                e.preventDefault();
-                if (searchRef.trim()) {
-                    setHistory([]);
-                    setRootRef(searchRef.trim().toUpperCase());
-                }
-            };
+            const handleDrillDown = (user) => { if (user) { setHistory(prev => [...prev, rootRef]); setRootRef(user.referralCode); } };
+            const handleGoUp = () => { if (history.length > 0) { const newHistory = [...history]; const prev = newHistory.pop(); setHistory(newHistory); setRootRef(prev); } };
+            const handleSearchSubmit = (e) => { e.preventDefault(); if (searchRef.trim()) { setHistory([]); setRootRef(searchRef.trim().toUpperCase()); } };
 
             return (
                 <div className="animate-fade-in space-y-6">
@@ -272,7 +245,6 @@
                             <div className="my-auto text-center"><i className="fas fa-circle-notch fa-spin text-3xl text-blue-500 mb-2"></i><p className="text-xs text-slate-400">Memuat Struktur Jaringan...</p></div>
                         ) : (
                             <div className="w-full flex flex-col items-center">
-                                {/* Root Node */}
                                 <div className="bg-slate-900 border-2 border-yellow-500/80 p-4 rounded-2xl text-center w-64 shadow-xl z-10 relative">
                                     <div className="w-12 h-12 bg-yellow-500/20 text-yellow-400 rounded-full flex items-center justify-center mx-auto mb-2 border border-yellow-500/40">
                                         <i className="fas fa-user-shield text-xl"></i>
@@ -280,12 +252,8 @@
                                     <h4 className="font-bold text-white text-sm">{treeData.root ? treeData.root.name : rootRef}</h4>
                                     <span className="bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full inline-block mt-1">ID: {rootRef}</span>
                                 </div>
-
                                 <div className="w-48 h-8 border-t-2 border-l-2 border-r-2 border-slate-700 rounded-t-xl my-0"></div>
-
-                                {/* Downline Branches */}
                                 <div className="flex justify-between w-full max-w-xl gap-6 z-10">
-                                    {/* Left Node */}
                                     <div className="w-1/2 flex flex-col items-center">
                                         {treeData.left ? (
                                             <div onClick={() => handleDrillDown(treeData.left)} className="bg-slate-900 border border-blue-500/50 hover:border-blue-400 p-4 rounded-2xl text-center w-full shadow-lg cursor-pointer transition transform hover:-translate-y-1">
@@ -297,13 +265,9 @@
                                                 <p className="text-[9px] text-slate-500 uppercase font-bold mt-2 border-t border-slate-800 pt-1">TIM KIRI</p>
                                             </div>
                                         ) : (
-                                            <div className="bg-slate-950/60 border border-slate-800 border-dashed p-6 rounded-2xl text-center w-full">
-                                                <p className="text-xs text-slate-500 font-bold uppercase">Kaki Kiri Kosong</p>
-                                            </div>
+                                            <div className="bg-slate-950/60 border border-slate-800 border-dashed p-6 rounded-2xl text-center w-full"><p className="text-xs text-slate-500 font-bold uppercase">Kaki Kiri Kosong</p></div>
                                         )}
                                     </div>
-
-                                    {/* Right Node */}
                                     <div className="w-1/2 flex flex-col items-center">
                                         {treeData.right ? (
                                             <div onClick={() => handleDrillDown(treeData.right)} className="bg-slate-900 border border-emerald-500/50 hover:border-emerald-400 p-4 rounded-2xl text-center w-full shadow-lg cursor-pointer transition transform hover:-translate-y-1">
@@ -315,9 +279,7 @@
                                                 <p className="text-[9px] text-slate-500 uppercase font-bold mt-2 border-t border-slate-800 pt-1">TIM KANAN</p>
                                             </div>
                                         ) : (
-                                            <div className="bg-slate-950/60 border border-slate-800 border-dashed p-6 rounded-2xl text-center w-full">
-                                                <p className="text-xs text-slate-500 font-bold uppercase">Kaki Kanan Kosong</p>
-                                            </div>
+                                            <div className="bg-slate-950/60 border border-slate-800 border-dashed p-6 rounded-2xl text-center w-full"><p className="text-xs text-slate-500 font-bold uppercase">Kaki Kanan Kosong</p></div>
                                         )}
                                     </div>
                                 </div>
@@ -339,110 +301,91 @@
 
                 const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
                     const list = [];
-                    snapshot.forEach(docSnap => {
-                        list.push({ id: docSnap.id, ...docSnap.data() });
-                    });
-                    setUsers(list);
-                    setLoading(false);
-                }, (err) => {
-                    console.error("Error fetching users:", err);
-                    setLoading(false);
-                });
+                    snapshot.forEach(docSnap => { list.push({ id: docSnap.id, ...docSnap.data() }); });
+                    setUsers(list); setLoading(false);
+                }, (err) => { console.error(err); setLoading(false); });
 
                 return () => unsub();
             }, []);
 
-            // Activation Handler
             const handleActivate = async (user) => {
                 try {
-                    const { db, doc, updateDoc, getDoc, collection, query, where, getDocs } = window.KreaNovaBackend;
+                    const { db, doc, updateDoc, collection, query, where, getDocs } = window.KreaNovaBackend;
                     
-                    // 1. Update status user
                     await updateDoc(doc(db, "users", user.id), { status: "ACTIVE" });
 
-                    // 2. Tambahkan bonus 40rb ke sponsor jika ada
                     if (user.sponsor && user.sponsor !== 'KREANOVA') {
                         const qSponsor = query(collection(db, "users"), where("referralCode", "==", user.sponsor));
                         const snapSponsor = await getDocs(qSponsor);
                         
                         snapSponsor.forEach(async (spDoc) => {
                             const spData = spDoc.data();
-                            const newWallet = (spData.walletAvailable || 0) + 40000;
+                            
                             let newLeft = spData.leftDirects || 0;
                             let newRight = spData.rightDirects || 0;
 
-                            if (user.position === 'KIRI') newLeft += 1;
-                            if (user.position === 'KANAN') newRight += 1;
+                            // PERBAIKAN: Hitung berdasarkan kaki absolut milik sponsor, bukan upline limpahan
+                            const legToIncrement = user.sponsorLeg || user.position;
+                            if (legToIncrement === 'KIRI') newLeft += 1;
+                            if (legToIncrement === 'KANAN') newRight += 1;
 
-                            const isQual = newLeft >= 10 && newRight >= 10;
+                            // LOGIKA BONUS QUALIFIED (Siklus Kelipatan 5)
+                            const oldPairs = Math.floor(Math.min(spData.leftDirects || 0, spData.rightDirects || 0) / 5);
+                            const newPairs = Math.floor(Math.min(newLeft, newRight) / 5);
+                            
+                            let qualifiedBonus = 0;
+                            if (newPairs > oldPairs) {
+                                qualifiedBonus = (newPairs - oldPairs) * 50000;
+                            }
+
+                            const newWallet = (spData.walletAvailable || 0) + 40000 + qualifiedBonus;
+                            const isQual = newPairs > 0;
 
                             await updateDoc(doc(db, "users", spDoc.id), {
                                 walletAvailable: newWallet,
                                 leftDirects: newLeft,
                                 rightDirects: newRight,
-                                isQualified: isQual
+                                isQualified: isQual,
+                                qualifiedPairs: newPairs
                             });
                         });
                     }
-
                     showToast(`Akun ${user.name} berhasil DIAKTIFKAN!`, 'success');
-                } catch (e) {
-                    showToast("Gagal mengaktifkan: " + e.message, 'error');
-                }
+                } catch (e) { showToast("Gagal mengaktifkan: " + e.message, 'error'); }
             };
 
-            // Block Handler
             const handleBlock = async (user) => {
                 try {
                     const { db, doc, updateDoc } = window.KreaNovaBackend;
                     await updateDoc(doc(db, "users", user.id), { status: "BLOCKED" });
                     showToast(`Akun ${user.name} telah DIBLOKIR!`, 'warning');
-                } catch (e) {
-                    showToast("Gagal memblokir: " + e.message, 'error');
-                }
+                } catch (e) { showToast("Gagal memblokir: " + e.message, 'error'); }
             };
 
-            // Unblock / Restore Handler
             const handleRestore = async (user) => {
                 try {
                     const { db, doc, updateDoc } = window.KreaNovaBackend;
                     await updateDoc(doc(db, "users", user.id), { status: "ACTIVE" });
                     showToast(`Akun ${user.name} berhasil DIPULIHKAN!`, 'success');
-                } catch (e) {
-                    showToast("Gagal memulihkan: " + e.message, 'error');
-                }
+                } catch (e) { showToast("Gagal memulihkan: " + e.message, 'error'); }
             };
 
-            // --- FITUR HAPUS DENGAN KOMPENSASI NAIK POSISI ---
             const handleDelete = async (user) => {
-                // Jangan gunakan alert/confirm sesuai pedoman mutlak. Langsung proses.
                 try {
                     const { db, doc, deleteDoc, updateDoc, collection, query, where, getDocs } = window.KreaNovaBackend;
-                    
-                    // 1. Cari anak (downline langsung) dari user yang akan dihapus
                     const qDownline = query(collection(db, "users"), where("upline", "==", user.referralCode));
                     const snapDownline = await getDocs(qDownline);
                     
-                    // 2. Jika punya anak, naikkan posisi anak tersebut ke upline dari user yang dihapus
                     if (!snapDownline.empty) {
-                        const newUplineCode = user.upline; // Upline dari orang yang dihapus
+                        const newUplineCode = user.upline; 
                         const promises = [];
-                        snapDownline.forEach((downDoc) => {
-                            // Mengubah ID Upline sang anak menjadi ID Upline sang kakek
-                            promises.push(updateDoc(doc(db, "users", downDoc.id), { upline: newUplineCode }));
-                        });
+                        snapDownline.forEach((downDoc) => { promises.push(updateDoc(doc(db, "users", downDoc.id), { upline: newUplineCode })); });
                         await Promise.all(promises);
-                        console.log(`${snapDownline.size} downline dari ${user.name} ditarik naik ke ${newUplineCode}.`);
                     }
-
-                    // 3. Hapus akun pengguna tersebut
                     await deleteDoc(doc(db, "users", user.id));
                     showToast(`Akun ${user.name} DIHAPUS. Jaringan di bawahnya telah ditarik naik.`, 'success');
-                } catch (e) {
-                    showToast("Gagal menghapus: " + e.message, 'error');
-                }
+                } catch (e) { showToast("Gagal menghapus: " + e.message, 'error'); }
             };
-            // ------------------------------------------------
 
             const filteredUsers = users.filter(u => 
                 (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -457,7 +400,6 @@
                             <h2 className="text-2xl font-bold text-white tracking-wide"><i className="fas fa-users text-blue-500 mr-2"></i> Database Member</h2>
                             <p className="text-slate-400 text-xs mt-1">Kelola pendaftaran, aktivasi, pemblokiran, dan pendaftaran pengguna.</p>
                         </div>
-
                         <div className="relative w-full md:w-72">
                             <i className="fas fa-search absolute left-3.5 top-3 text-slate-500 text-xs"></i>
                             <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Cari nama, email, atau ID..." className="w-full bg-slate-900 border border-slate-700 text-white pl-9 pr-4 py-2.5 rounded-xl text-xs outline-none focus:border-blue-500" />
@@ -478,18 +420,9 @@
                                 </thead>
                                 <tbody className="divide-y divide-slate-800/60 text-xs">
                                     {loading ? (
-                                        <tr>
-                                            <td colSpan="5" className="p-8 text-center text-slate-500">
-                                                <i className="fas fa-circle-notch fa-spin text-2xl mb-2"></i>
-                                                <p>Memuat Data Member...</p>
-                                            </td>
-                                        </tr>
+                                        <tr><td colSpan="5" className="p-8 text-center text-slate-500"><i className="fas fa-circle-notch fa-spin text-2xl mb-2"></i><p>Memuat Data Member...</p></td></tr>
                                     ) : filteredUsers.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="5" className="p-8 text-center text-slate-500">
-                                                Tidak ada member ditemukan.
-                                            </td>
-                                        </tr>
+                                        <tr><td colSpan="5" className="p-8 text-center text-slate-500">Tidak ada member ditemukan.</td></tr>
                                     ) : (
                                         filteredUsers.map((u) => (
                                             <tr key={u.id} className="hover:bg-slate-800/40 transition">
@@ -502,9 +435,7 @@
                                                     <p className="font-bold text-slate-300">{u.sponsor || 'KREANOVA'}</p>
                                                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded mt-1 inline-block ${u.position === 'KIRI' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>{u.position || 'KIRI'}</span>
                                                 </td>
-                                                <td className="p-4 font-mono font-bold text-white">
-                                                    {formatIDR(u.billAmount)}
-                                                </td>
+                                                <td className="p-4 font-mono font-bold text-white">{formatIDR(u.billAmount)}</td>
                                                 <td className="p-4">
                                                     {u.status === 'PENDING' && <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-[10px] font-bold">MENUNGGU</span>}
                                                     {u.status === 'ACTIVE' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full text-[10px] font-bold">AKTIF</span>}
@@ -513,23 +444,15 @@
                                                 <td className="p-4">
                                                     <div className="flex items-center justify-center space-x-2">
                                                         {u.status === 'PENDING' && (
-                                                            <button onClick={() => handleActivate(u)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] shadow transition flex items-center">
-                                                                <i className="fas fa-check mr-1"></i> Aktifkan
-                                                            </button>
+                                                            <button onClick={() => handleActivate(u)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] shadow transition flex items-center"><i className="fas fa-check mr-1"></i> Aktifkan</button>
                                                         )}
                                                         {u.status === 'ACTIVE' && (
-                                                            <button onClick={() => handleBlock(u)} className="bg-amber-600/30 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/40 px-3 py-1.5 rounded-lg font-bold text-[10px] transition flex items-center">
-                                                                <i className="fas fa-ban mr-1"></i> Blokir
-                                                            </button>
+                                                            <button onClick={() => handleBlock(u)} className="bg-amber-600/30 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/40 px-3 py-1.5 rounded-lg font-bold text-[10px] transition flex items-center"><i className="fas fa-ban mr-1"></i> Blokir</button>
                                                         )}
                                                         {u.status === 'BLOCKED' && (
-                                                            <button onClick={() => handleRestore(u)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] transition flex items-center">
-                                                                <i className="fas fa-undo mr-1"></i> Pulihkan
-                                                            </button>
+                                                            <button onClick={() => handleRestore(u)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] transition flex items-center"><i className="fas fa-undo mr-1"></i> Pulihkan</button>
                                                         )}
-                                                        <button onClick={() => handleDelete(u)} className="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40 px-2.5 py-1.5 rounded-lg font-bold text-[10px] transition">
-                                                            <i className="fas fa-trash"></i>
-                                                        </button>
+                                                        <button onClick={() => handleDelete(u)} className="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40 px-2.5 py-1.5 rounded-lg font-bold text-[10px] transition"><i className="fas fa-trash"></i></button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -545,12 +468,9 @@
 
         const AdminLinks = ({ showToast }) => {
             const [menus, setMenus] = useState([
-                { id: 1, name: 'Tutorial Penggunaan GenAI', url: '' },
-                { id: 2, name: 'Affiliate Produk', url: '' },
-                { id: 3, name: 'Drama Short', url: '' },
-                { id: 4, name: 'Motivasiku', url: '' },
-                { id: 5, name: 'Qur\'an Overlay', url: '' },
-                { id: 6, name: 'Animal Creature', url: '' },
+                { id: 1, name: 'Tutorial Penggunaan GenAI', url: '' }, { id: 2, name: 'Affiliate Produk', url: '' },
+                { id: 3, name: 'Drama Short', url: '' }, { id: 4, name: 'Motivasiku', url: '' },
+                { id: 5, name: 'Qur\'an Overlay', url: '' }, { id: 6, name: 'Animal Creature', url: '' },
                 { id: 7, name: 'Animal Human Activity', url: '' }
             ]);
             const [bannerText, setBannerText] = useState('');
@@ -569,36 +489,23 @@
                             if (data.bannerText !== undefined) setBannerText(data.bannerText);
                             if (data.tripayLink !== undefined) setTripayLink(data.tripayLink);
                         }
-                    } catch (e) {
-                        console.error("Error fetching global links:", e);
-                    }
+                    } catch (e) { console.error("Error fetching global links:", e); }
                 };
                 fetchGlobalLinks();
             }, []);
 
-            const handleMenuChange = (index, field, value) => {
-                const updated = [...menus];
-                updated[index][field] = value;
-                setMenus(updated);
-            };
+            const handleMenuChange = (index, field, value) => { const updated = [...menus]; updated[index][field] = value; setMenus(updated); };
 
             const handleSave = async (e) => {
-                e.preventDefault();
-                setSaving(true);
+                e.preventDefault(); setSaving(true);
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
                     await setDoc(doc(db, "settings", "global_links"), {
-                        mainMenus: menus,
-                        bannerText: bannerText,
-                        tripayLink: tripayLink,
-                        updatedAt: new Date().toISOString()
+                        mainMenus: menus, bannerText: bannerText, tripayLink: tripayLink, updatedAt: new Date().toISOString()
                     });
                     showToast("Pengaturan Tautan & Banner Berhasil Disimpan!", "success");
-                } catch (err) {
-                    showToast("Gagal menyimpan: " + err.message, "error");
-                } finally {
-                    setSaving(false);
-                }
+                } catch (err) { showToast("Gagal menyimpan: " + err.message, "error"); } 
+                finally { setSaving(false); }
             };
 
             return (
@@ -607,32 +514,18 @@
                         <h2 className="text-2xl font-bold text-white tracking-wide"><i className="fas fa-link text-blue-500 mr-2"></i> Manajemen Tautan & Konten</h2>
                         <p className="text-slate-400 text-xs mt-1">Atur link modul AI Studio, teks pengumuman banner, dan link pembayaran Tripay.</p>
                     </div>
-
                     <form onSubmit={handleSave} className="space-y-6">
-                        {/* Banner Popup Naskah */}
                         <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-yellow-500 space-y-3">
-                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center">
-                                <i className="fas fa-bullhorn text-yellow-500 mr-2"></i> Banner Informasi Pop-up (Teks Naskah)
-                            </h3>
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center"><i className="fas fa-bullhorn text-yellow-500 mr-2"></i> Banner Informasi Pop-up (Teks Naskah)</h3>
                             <p className="text-xs text-slate-400">Naskah teks ini akan dibaca oleh pengguna saat menekan logo KreaNova AI di tengah bawah dashboard.</p>
-                            <textarea value={bannerText} onChange={e => setBannerText(e.target.value)} rows="5" placeholder="Masukkan naskah pengumuman atau instruksi di sini..." className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-xl text-xs outline-none focus:border-yellow-500 custom-scrollbar"></textarea>
+                            <textarea value={bannerText} onChange={e => setBannerText(e.target.value)} rows="5" placeholder="Masukkan naskah pengumuman di sini..." className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-xl text-xs outline-none focus:border-yellow-500 custom-scrollbar"></textarea>
                         </div>
-
-                        {/* Tripay Gateway */}
                         <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-emerald-500 space-y-3">
-                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center">
-                                <i className="fas fa-credit-card text-emerald-500 mr-2"></i> Tautan Payment Gateway (Tripay)
-                            </h3>
-                            <p className="text-xs text-slate-400">Tautan pembayaran untuk member pending melakukan pembayaran aktivasi.</p>
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center"><i className="fas fa-credit-card text-emerald-500 mr-2"></i> Tautan Payment Gateway (Tripay)</h3>
                             <input type="url" value={tripayLink} onChange={e => setTripayLink(e.target.value)} placeholder="https://tripay.co.id/checkout/..." className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl text-xs outline-none focus:border-emerald-500" />
                         </div>
-
-                        {/* AI Studio Moduls */}
                         <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-blue-500 space-y-4">
-                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center">
-                                <i className="fas fa-robot text-blue-500 mr-2"></i> Modul AI Studio (10 Menu)
-                            </h3>
-
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center"><i className="fas fa-robot text-blue-500 mr-2"></i> Modul AI Studio (10 Menu)</h3>
                             <div className="space-y-3">
                                 {menus.map((m, idx) => (
                                     <div key={idx} className="flex flex-col sm:flex-row gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800 items-center">
@@ -643,7 +536,6 @@
                                 ))}
                             </div>
                         </div>
-
                         <button type="submit" disabled={saving} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 transition transform hover:-translate-y-0.5">
                             {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <><i className="fas fa-save mr-2"></i> Simpan Semua Perubahan</>}
                         </button>
@@ -670,11 +562,8 @@
 
             const handleSubmit = (e) => {
                 e.preventDefault();
-                if (username === 'admin' && password === 'admin1980') {
-                    onLogin();
-                } else {
-                    setError('Username atau Password salah!');
-                }
+                if (username === 'admin' && password === 'admin1980') { onLogin(); } 
+                else { setError('Username atau Password salah!'); }
             };
 
             return (
@@ -687,11 +576,7 @@
                             <h2 className="text-2xl font-bold text-white glow-text mb-1">Portal Admin</h2>
                             <p className="text-sm text-slate-400">Silakan login untuk mengakses sistem</p>
                         </div>
-                        {error && (
-                            <div className="bg-red-500/10 border border-red-500/50 text-red-500 text-sm p-3 rounded-lg mb-6 text-center flex items-center justify-center">
-                                <i className="fas fa-exclamation-circle mr-2"></i>{error}
-                            </div>
-                        )}
+                        {error && <div className="bg-red-500/10 border border-red-500/50 text-red-500 text-sm p-3 rounded-lg mb-6 text-center flex items-center justify-center"><i className="fas fa-exclamation-circle mr-2"></i>{error}</div>}
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2"><i className="fas fa-user mr-1"></i> Username</label>
@@ -717,41 +602,23 @@
             const [pendingCount, setPendingCount] = useState(0);
 
             const showToast = (msg, type) => setToast({ msg, type });
+            const handleLogin = () => { sessionStorage.setItem('adminLoggedIn', 'true'); setIsLoggedIn(true); };
+            const handleLogout = () => { sessionStorage.removeItem('adminLoggedIn'); setIsLoggedIn(false); };
 
-            const handleLogin = () => {
-                sessionStorage.setItem('adminLoggedIn', 'true');
-                setIsLoggedIn(true);
-            };
-
-            const handleLogout = () => {
-                sessionStorage.removeItem('adminLoggedIn');
-                setIsLoggedIn(false);
-            };
-
-            // Real-time listener untuk notifikasi pending member
             useEffect(() => {
                 if (!window.KreaNovaBackend || !isLoggedIn) return;
                 const { db, collection, query, where, onSnapshot } = window.KreaNovaBackend;
-
                 const q = query(collection(db, "users"), where("status", "==", "PENDING"));
-                const unsubscribe = onSnapshot(q, (snapshot) => {
-                    setPendingCount(snapshot.size);
-                }, (error) => {
-                    console.error("Error notification listener:", error);
-                });
-
+                const unsubscribe = onSnapshot(q, (snapshot) => { setPendingCount(snapshot.size); }, (error) => { console.error(error); });
                 return () => unsubscribe();
             }, [isLoggedIn]);
 
-            if (!isLoggedIn) {
-                return <AdminLogin onLogin={handleLogin} />;
-            }
+            if (!isLoggedIn) return <AdminLogin onLogin={handleLogin} />;
 
             return (
                 <div className="h-screen w-full flex bg-[#0b0f19] overflow-hidden">
                     {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
-                    {/* Sidebar */}
                     <aside className="w-72 bg-[#0d1323]/95 backdrop-blur-xl border-r border-slate-800 flex flex-col z-20 shadow-2xl shrink-0">
                         <div className="p-6 border-b border-slate-800 flex items-center space-x-4">
                             <div className="w-12 h-12 bg-slate-900 rounded-xl border border-yellow-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(250,204,21,0.2)]">
@@ -789,7 +656,6 @@
                         </div>
                     </aside>
 
-                    {/* Main Workspace */}
                     <main className="flex-1 flex flex-col min-w-0">
                         <header className="h-20 border-b border-slate-800 flex items-center justify-between px-8 bg-[#0b0f19]/80 backdrop-blur-md z-10 shrink-0">
                             <div className="text-slate-400 text-sm font-medium">
