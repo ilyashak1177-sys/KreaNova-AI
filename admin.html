@@ -65,34 +65,89 @@
         };
 
         // --- 1. DASHBOARD ---
-        const DashboardOverview = () => (
-            <div className="animate-fade-in space-y-6">
-                <div className="flex justify-between items-end mb-8">
-                    <div>
-                        <h2 className="text-2xl font-bold text-white mb-1 glow-text">Pusat Komando</h2>
-                        <p className="text-sm text-slate-400">Ringkasan performa KreaNova AI secara Real-Time.</p>
+        const DashboardOverview = () => {
+            const [stats, setStats] = useState({ total: 0, active: 0, wd: 0, revenue: 0 });
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                const fetchStats = async () => {
+                    if (!window.KreaNovaBackend) return;
+                    try {
+                        const { db, collection, getDocs, query, where } = window.KreaNovaBackend;
+                        
+                        // 1. Mengambil data Member
+                        const usersSnap = await getDocs(collection(db, "users"));
+                        let total = 0;
+                        let active = 0;
+                        let revenue = 0;
+
+                        usersSnap.forEach(doc => {
+                            const data = doc.data();
+                            total++;
+                            if (data.status === 'ACTIVE') {
+                                active++;
+                                revenue += (data.billAmount || 0); // Menjumlahkan tagihan member aktif sebagai revenue
+                            }
+                        });
+
+                        // 2. Mengambil data Antrean WD (Penarikan Dana)
+                        let wdCount = 0;
+                        try {
+                            const qWD = query(collection(db, "withdrawals"), where("status", "==", "PENDING"));
+                            const wdSnap = await getDocs(qWD);
+                            wdCount = wdSnap.size;
+                        } catch (e) {
+                            // Abaikan error jika koleksi withdrawals belum terbentuk
+                        }
+
+                        setStats({ total, active, wd: wdCount, revenue });
+                    } catch (error) {
+                        console.error("Gagal mengambil statistik dashboard:", error);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                fetchStats();
+            }, []);
+
+            return (
+                <div className="animate-fade-in space-y-6">
+                    <div className="flex justify-between items-end mb-8">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white mb-1 glow-text">Pusat Komando</h2>
+                            <p className="text-sm text-slate-400">Ringkasan performa KreaNova AI secara Real-Time.</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-blue-500 shadow-lg relative overflow-hidden">
+                            <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-slate-400 text-xs font-bold uppercase">Total Member</p><i className="fas fa-users text-blue-400 text-xl"></i></div>
+                            <h3 className="text-3xl font-black text-white relative z-10">
+                                {loading ? <i className="fas fa-spinner fa-spin text-xl text-slate-500"></i> : stats.total}
+                            </h3>
+                        </div>
+                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-emerald-500 shadow-lg relative overflow-hidden">
+                            <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-slate-400 text-xs font-bold uppercase">Member Aktif</p><i className="fas fa-user-check text-emerald-400 text-xl"></i></div>
+                            <h3 className="text-3xl font-black text-white relative z-10">
+                                {loading ? <i className="fas fa-spinner fa-spin text-xl text-slate-500"></i> : stats.active}
+                            </h3>
+                        </div>
+                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-orange-500 shadow-lg relative overflow-hidden">
+                            <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-slate-400 text-xs font-bold uppercase">Antrean WD</p><i className="fas fa-wallet text-orange-400 text-xl"></i></div>
+                            <h3 className="text-3xl font-black text-white relative z-10">
+                                {loading ? <i className="fas fa-spinner fa-spin text-xl text-slate-500"></i> : stats.wd}
+                            </h3>
+                        </div>
+                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-yellow-500 shadow-lg relative overflow-hidden">
+                            <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-slate-400 text-xs font-bold uppercase">Revenue (Rp)</p><i className="fas fa-chart-line text-yellow-400 text-xl"></i></div>
+                            <h3 className="text-2xl sm:text-3xl font-black text-white relative z-10">
+                                {loading ? <i className="fas fa-spinner fa-spin text-xl text-slate-500"></i> : new Intl.NumberFormat('id-ID').format(stats.revenue)}
+                            </h3>
+                        </div>
                     </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-blue-500 shadow-lg">
-                        <div className="flex justify-between items-center mb-4"><p className="text-slate-400 text-xs font-bold uppercase">Total Member</p><i className="fas fa-users text-blue-400 text-xl"></i></div>
-                        <h3 className="text-3xl font-black text-white">0</h3>
-                    </div>
-                    <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-emerald-500 shadow-lg">
-                        <div className="flex justify-between items-center mb-4"><p className="text-slate-400 text-xs font-bold uppercase">Member Aktif</p><i className="fas fa-user-check text-emerald-400 text-xl"></i></div>
-                        <h3 className="text-3xl font-black text-white">0</h3>
-                    </div>
-                    <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-orange-500 shadow-lg">
-                        <div className="flex justify-between items-center mb-4"><p className="text-slate-400 text-xs font-bold uppercase">Antrean WD</p><i className="fas fa-wallet text-orange-400 text-xl"></i></div>
-                        <h3 className="text-3xl font-black text-white">0</h3>
-                    </div>
-                    <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-yellow-500 shadow-lg">
-                        <div className="flex justify-between items-center mb-4"><p className="text-slate-400 text-xs font-bold uppercase">Revenue (Rp)</p><i className="fas fa-chart-line text-yellow-400 text-xl"></i></div>
-                        <h3 className="text-3xl font-black text-white">0</h3>
-                    </div>
-                </div>
-            </div>
-        );
+            );
+        };
 
         // --- 3. DATABASE MEMBER ---
         const AdminUsers = ({ showToast }) => {
