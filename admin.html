@@ -2,8 +2,8 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KreaNova AI | Super Admin Portal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KreaNova AI - Admin Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -11,27 +11,25 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f19; color: #e2e8f0; margin: 0; overflow: hidden; }
-        .glass-panel { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f19; color: #cbd5e1; margin: 0; padding: 0; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        .glow-text { text-shadow: 0 0 10px rgba(234, 179, 8, 0.5); }
-        .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .glass-panel { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .glow-text { text-shadow: 0 0 12px rgba(59, 130, 246, 0.5); }
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
         .animate-slide-up { animation: slideUp 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .tree-node { display: flex; flex-direction: column; align-items: center; position: relative; padding: 20px 0; transition: all 0.3s; }
-        .tree-node::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 2px solid #334155; width: 0; height: 20px; }
-        .tree-root::before { display: none; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body>
+<body class="bg-[#0b0f19] text-slate-200">
     <div id="root"></div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, getDocs, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCWpjChuqzjUe4_foM2gCS4_XoCQE33lHk",
@@ -43,323 +41,480 @@
             measurementId: "G-Q6B30PVTP0"
         };
 
-        let app, auth, db;
         try {
-            app = initializeApp(firebaseConfig); auth = getAuth(app); db = getFirestore(app);
-        } catch (error) { console.warn("Firebase Warning:", error.message); }
-        window.KreaNovaBackend = { auth, db, collection, getDocs, updateDoc, deleteDoc, doc, setDoc, getDoc, query, where, onSnapshot };
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            window.KreaNovaBackend = { db, collection, query, where, onSnapshot, getDocs, doc, setDoc, updateDoc, deleteDoc, getDoc, serverTimestamp };
+        } catch (error) {
+            console.error("Firebase Admin Error:", error);
+        }
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useCallback } = React;
+
+        const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0);
 
         const Toast = ({ message, type, onClose }) => {
-            useEffect(() => { const timer = setTimeout(onClose, 3000); return () => clearTimeout(timer); }, [onClose]);
-            const bgColor = type === 'success' ? 'bg-emerald-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+            useEffect(() => {
+                const timer = setTimeout(onClose, 4000);
+                return () => clearTimeout(timer);
+            }, [onClose]);
+
+            const bgClass = type === 'error' ? 'bg-red-500' : type === 'warning' ? 'bg-amber-500' : 'bg-emerald-600';
+
             return (
-                <div className={`fixed top-5 right-5 ${bgColor} text-white px-6 py-3 rounded-lg shadow-2xl z-50 animate-slide-up flex items-center gap-3`}>
-                    <i className={`fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} text-xl`}></i>
-                    <span className="font-semibold text-sm">{message}</span>
+                <div className={`fixed top-5 right-5 z-50 ${bgClass} text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 animate-slide-up`}>
+                    <i className={`fas ${type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'}`}></i>
+                    <span className="text-xs font-bold">{message}</span>
+                    <button onClick={onClose} className="ml-3 text-white/80 hover:text-white"><i className="fas fa-times"></i></button>
                 </div>
             );
         };
 
-        // --- 1. DASHBOARD ---
         const DashboardOverview = () => {
-            const [stats, setStats] = useState({ total: 0, active: 0, wd: 0, revenue: 0 });
+            const [stats, setStats] = useState({
+                totalMembers: 0,
+                activeMembers: 0,
+                revenue: 0,
+                pendingWD: 0
+            });
             const [loading, setLoading] = useState(true);
 
             useEffect(() => {
-                const fetchStats = async () => {
-                    if (!window.KreaNovaBackend) return;
-                    try {
-                        const { db, collection, getDocs, query, where } = window.KreaNovaBackend;
-                        
-                        // 1. Mengambil data Member
-                        const usersSnap = await getDocs(collection(db, "users"));
-                        let total = 0;
-                        let active = 0;
-                        let revenue = 0;
+                if (!window.KreaNovaBackend) return;
+                const { db, collection, onSnapshot } = window.KreaNovaBackend;
 
-                        usersSnap.forEach(doc => {
-                            const data = doc.data();
-                            total++;
-                            if (data.status === 'ACTIVE') {
-                                active++;
-                                revenue += (data.billAmount || 0); // Menjumlahkan tagihan member aktif sebagai revenue
-                            }
-                        });
+                const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
+                    let total = snapshot.size;
+                    let active = 0;
+                    let rev = 0;
 
-                        // 2. Mengambil data Antrean WD (Penarikan Dana)
-                        let wdCount = 0;
-                        try {
-                            const qWD = query(collection(db, "withdrawals"), where("status", "==", "PENDING"));
-                            const wdSnap = await getDocs(qWD);
-                            wdCount = wdSnap.size;
-                        } catch (e) {
-                            // Abaikan error jika koleksi withdrawals belum terbentuk
+                    snapshot.forEach(docSnap => {
+                        const data = docSnap.data();
+                        if (data.status === 'ACTIVE') {
+                            active += 1;
+                            rev += (data.billAmount || 150000);
                         }
+                    });
 
-                        setStats({ total, active, wd: wdCount, revenue });
-                    } catch (error) {
-                        console.error("Gagal mengambil statistik dashboard:", error);
-                    } finally {
-                        setLoading(false);
-                    }
-                };
+                    setStats({
+                        totalMembers: total,
+                        activeMembers: active,
+                        revenue: rev,
+                        pendingWD: 0
+                    });
+                    setLoading(false);
+                }, (err) => {
+                    console.error("Error loading dashboard stats:", err);
+                    setLoading(false);
+                });
 
-                fetchStats();
+                return () => unsub();
             }, []);
 
             return (
                 <div className="animate-fade-in space-y-6">
-                    <div className="flex justify-between items-end mb-8">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
-                            <h2 className="text-2xl font-bold text-white mb-1 glow-text">Pusat Komando</h2>
-                            <p className="text-sm text-slate-400">Ringkasan performa KreaNova AI secara Real-Time.</p>
+                            <h2 className="text-2xl font-bold text-white tracking-wide">Pusat Komando</h2>
+                            <p className="text-slate-400 text-xs mt-1">Gambaran umum performa sistem KreaNova AI secara real-time.</p>
+                        </div>
+                        <div className="bg-slate-900/80 border border-slate-800 px-4 py-2 rounded-xl flex items-center space-x-2 text-xs text-emerald-400">
+                            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>
+                            <span className="font-semibold">Sistem Berjalan Normal</span>
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-blue-500 shadow-lg relative overflow-hidden">
-                            <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-slate-400 text-xs font-bold uppercase">Total Member</p><i className="fas fa-users text-blue-400 text-xl"></i></div>
-                            <h3 className="text-3xl font-black text-white relative z-10">
-                                {loading ? <i className="fas fa-spinner fa-spin text-xl text-slate-500"></i> : stats.total}
-                            </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <div className="glass-panel p-5 rounded-2xl border-t-4 border-t-blue-500 relative overflow-hidden">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Member</p>
+                                    <h3 className="text-2xl font-black text-white mt-2">{loading ? '...' : stats.totalMembers}</h3>
+                                </div>
+                                <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 border border-blue-500/20">
+                                    <i className="fas fa-users text-lg"></i>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-3"><i className="fas fa-database text-blue-400 mr-1"></i> Terdaftar di Firestore</p>
                         </div>
-                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-emerald-500 shadow-lg relative overflow-hidden">
-                            <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-slate-400 text-xs font-bold uppercase">Member Aktif</p><i className="fas fa-user-check text-emerald-400 text-xl"></i></div>
-                            <h3 className="text-3xl font-black text-white relative z-10">
-                                {loading ? <i className="fas fa-spinner fa-spin text-xl text-slate-500"></i> : stats.active}
-                            </h3>
+
+                        <div className="glass-panel p-5 rounded-2xl border-t-4 border-t-emerald-500 relative overflow-hidden">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Member Aktif</p>
+                                    <h3 className="text-2xl font-black text-white mt-2">{loading ? '...' : stats.activeMembers}</h3>
+                                </div>
+                                <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-500/20">
+                                    <i className="fas fa-user-check text-lg"></i>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-3"><i className="fas fa-check-circle text-emerald-400 mr-1"></i> Akun Sudah Diverifikasi</p>
                         </div>
-                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-orange-500 shadow-lg relative overflow-hidden">
-                            <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-slate-400 text-xs font-bold uppercase">Antrean WD</p><i className="fas fa-wallet text-orange-400 text-xl"></i></div>
-                            <h3 className="text-3xl font-black text-white relative z-10">
-                                {loading ? <i className="fas fa-spinner fa-spin text-xl text-slate-500"></i> : stats.wd}
-                            </h3>
+
+                        <div className="glass-panel p-5 rounded-2xl border-t-4 border-t-yellow-500 relative overflow-hidden">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Revenue Pendaftaran</p>
+                                    <h3 className="text-xl font-black text-white mt-2">{loading ? '...' : formatIDR(stats.revenue)}</h3>
+                                </div>
+                                <div className="w-10 h-10 bg-yellow-500/10 rounded-xl flex items-center justify-center text-yellow-400 border border-yellow-500/20">
+                                    <i className="fas fa-coins text-lg"></i>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-3"><i className="fas fa-chart-line text-yellow-400 mr-1"></i> Total Masuk Aktivasi</p>
                         </div>
-                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-yellow-500 shadow-lg relative overflow-hidden">
-                            <div className="flex justify-between items-center mb-4 relative z-10"><p className="text-slate-400 text-xs font-bold uppercase">Revenue (Rp)</p><i className="fas fa-chart-line text-yellow-400 text-xl"></i></div>
-                            <h3 className="text-2xl sm:text-3xl font-black text-white relative z-10">
-                                {loading ? <i className="fas fa-spinner fa-spin text-xl text-slate-500"></i> : new Intl.NumberFormat('id-ID').format(stats.revenue)}
-                            </h3>
+
+                        <div className="glass-panel p-5 rounded-2xl border-t-4 border-t-purple-500 relative overflow-hidden">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Antrean WD</p>
+                                    <h3 className="text-2xl font-black text-white mt-2">{stats.pendingWD}</h3>
+                                </div>
+                                <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400 border border-purple-500/20">
+                                    <i className="fas fa-wallet text-lg"></i>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-3"><i className="fas fa-clock text-purple-400 mr-1"></i> Permintaan Penarikan</p>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        // --- 3. DATABASE MEMBER ---
-        const AdminUsers = ({ showToast }) => {
-            const [users, setUsers] = useState([]);
-            const [loading, setLoading] = useState(true);
-            const [searchQuery, setSearchQuery] = useState("");
-            const [processingId, setProcessingId] = useState(null);
+        const AdminNetworkTree = () => {
+            const [rootRef, setRootRef] = useState('KREANOVA');
+            const [searchRef, setSearchRef] = useState('');
+            const [treeData, setTreeData] = useState({ root: null, left: null, right: null });
+            const [history, setHistory] = useState([]);
+            const [loading, setLoading] = useState(false);
 
-            useEffect(() => { fetchUsers(); }, []);
-
-            const fetchUsers = async () => {
-                if(!window.KreaNovaBackend) return;
+            const fetchNode = useCallback(async (refCode) => {
+                if (!window.KreaNovaBackend) return;
                 setLoading(true);
                 try {
-                    const { db, collection, getDocs } = window.KreaNovaBackend;
-                    const snap = await getDocs(collection(db, "users"));
-                    const userList = [];
-                    snap.forEach(doc => userList.push(doc.data()));
-                    userList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-                    setUsers(userList);
+                    const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
+                    
+                    // Fetch Root User
+                    const qRoot = query(collection(db, "users"), where("referralCode", "==", refCode));
+                    const snapRoot = await getDocs(qRoot);
+                    let rootUser = null;
+                    snapRoot.forEach(docSnap => { rootUser = docSnap.data(); });
+
+                    let leftUser = null;
+                    let rightUser = null;
+
+                    if (rootUser) {
+                        const qDown = query(collection(db, "users"), where("upline", "==", refCode));
+                        const snapDown = await getDocs(qDown);
+                        snapDown.forEach(docSnap => {
+                            const data = docSnap.data();
+                            if (data.position === 'KIRI') leftUser = data;
+                            if (data.position === 'KANAN') rightUser = data;
+                        });
+                    }
+
+                    setTreeData({ root: rootUser, left: leftUser, right: rightUser });
                 } catch (e) {
-                    console.error(e);
-                    showToast("Gagal mengambil data pengguna.", "error");
+                    console.error("Error fetching tree:", e);
                 } finally {
                     setLoading(false);
                 }
+            }, []);
+
+            useEffect(() => {
+                fetchNode(rootRef);
+            }, [rootRef, fetchNode]);
+
+            const handleDrillDown = (user) => {
+                if (!user) return;
+                setHistory(prev => [...prev, rootRef]);
+                setRootRef(user.referralCode);
             };
 
-            const handleActivate = async (targetUser) => {
-                if(!window.KreaNovaBackend) return;
-                setProcessingId(targetUser.userId + '-activate');
-                try {
-                    const { db, doc, updateDoc, getDocs, collection, query, where } = window.KreaNovaBackend;
-                    
-                    // 1. Aktifkan akun member
-                    await updateDoc(doc(db, "users", targetUser.userId), {
-                        status: 'ACTIVE'
-                    });
+            const handleGoUp = () => {
+                if (history.length === 0) return;
+                const newHistory = [...history];
+                const prev = newHistory.pop();
+                setHistory(newHistory);
+                setRootRef(prev);
+            };
 
-                    // 2. Cari Sponsor untuk membagikan bonus
-                    if (targetUser.sponsor && targetUser.sponsor !== 'KREANOVA') {
-                        const qSponsor = query(collection(db, "users"), where("referralCode", "==", targetUser.sponsor));
-                        const sponsorSnap = await getDocs(qSponsor);
-                        
-                        if (!sponsorSnap.empty) {
-                            const sponsorDoc = sponsorSnap.docs[0];
-                            const sponsorData = sponsorDoc.data();
-                            
-                            let newWallet = (sponsorData.walletAvailable || 0) + 40000;
-                            let newLeftDirects = sponsorData.leftDirects || 0;
-                            let newRightDirects = sponsorData.rightDirects || 0;
-
-                            if (targetUser.position === 'KIRI') newLeftDirects += 1;
-                            if (targetUser.position === 'KANAN') newRightDirects += 1;
-
-                            let qualified = sponsorData.isQualified || false;
-
-                            // Cek syarat Qualified
-                            if (!qualified && newLeftDirects >= 10 && newRightDirects >= 10) {
-                                newWallet += 50000;
-                                qualified = true;
-                                showToast(`Bonus Qualified Rp50.000 cair ke sponsor ${sponsorData.name}!`, 'success');
-                            }
-
-                            await updateDoc(doc(db, "users", sponsorData.userId), {
-                                walletAvailable: newWallet,
-                                leftDirects: newLeftDirects,
-                                rightDirects: newRightDirects,
-                                isQualified: qualified
-                            });
-                        }
-                    }
-                    showToast(`Akun ${targetUser.name} berhasil diaktifkan!`, "success");
-                    fetchUsers();
-                } catch (e) {
-                    console.error(e);
-                    showToast("Gagal aktivasi: " + e.message, "error");
-                } finally {
-                    setProcessingId(null);
+            const handleSearchSubmit = (e) => {
+                e.preventDefault();
+                if (searchRef.trim()) {
+                    setHistory([]);
+                    setRootRef(searchRef.trim().toUpperCase());
                 }
             };
-
-            const handleBlock = async (targetUser) => {
-                if(!window.KreaNovaBackend) return;
-                setProcessingId(targetUser.userId + '-block');
-                try {
-                    const { db, doc, updateDoc } = window.KreaNovaBackend;
-                    await updateDoc(doc(db, "users", targetUser.userId), { status: 'BLOCKED' });
-                    showToast(`Akun ${targetUser.name} berhasil diblokir.`, "success");
-                    fetchUsers();
-                } catch (e) {
-                    showToast("Gagal memblokir: " + e.message, "error");
-                } finally {
-                    setProcessingId(null);
-                }
-            };
-
-            const handleReactivate = async (targetUser) => {
-                if(!window.KreaNovaBackend) return;
-                setProcessingId(targetUser.userId + '-reactivate');
-                try {
-                    const { db, doc, updateDoc } = window.KreaNovaBackend;
-                    // Aktifkan tanpa membagikan ulang bonus
-                    await updateDoc(doc(db, "users", targetUser.userId), { status: 'ACTIVE' });
-                    showToast(`Akun ${targetUser.name} dipulihkan (Tanpa bonus ganda).`, "success");
-                    fetchUsers();
-                } catch (e) {
-                    showToast("Gagal memulihkan: " + e.message, "error");
-                } finally {
-                    setProcessingId(null);
-                }
-            };
-
-            const handleDelete = async (targetUser) => {
-                if(!window.KreaNovaBackend) return;
-                setProcessingId(targetUser.userId + '-delete');
-                try {
-                    const { db, doc, deleteDoc } = window.KreaNovaBackend;
-                    await deleteDoc(doc(db, "users", targetUser.userId));
-                    showToast(`Data ${targetUser.name} berhasil dihapus permanen.`, "success");
-                    fetchUsers();
-                } catch (e) {
-                    showToast("Gagal menghapus: " + e.message, "error");
-                } finally {
-                    setProcessingId(null);
-                }
-            };
-
-            const filteredUsers = users.filter(u => u.name?.toLowerCase().includes(searchQuery.toLowerCase()) || u.referralCode?.toLowerCase().includes(searchQuery.toLowerCase()));
 
             return (
-                <div className="animate-fade-in space-y-6 pb-10">
-                    <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-4">
+                <div className="animate-fade-in space-y-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
-                            <h2 className="text-2xl font-bold text-white mb-1"><i className="fas fa-users-cog text-blue-500 mr-2"></i> Database Member</h2>
-                            <p className="text-sm text-slate-400">Kelola pendaftaran, aktivasi, pemblokiran, dan penghapusan pengguna.</p>
+                            <h2 className="text-2xl font-bold text-white tracking-wide"><i className="fas fa-sitemap text-blue-500 mr-2"></i> Pohon Jaringan Sistem</h2>
+                            <p className="text-slate-400 text-xs mt-1">Eksplorasi seluruh struktur jaringan member secara hierarki.</p>
                         </div>
-                        <div className="relative">
-                            <i className="fas fa-search absolute left-3 top-3.5 text-slate-500"></i>
-                            <input type="text" placeholder="Cari nama / ID..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full md:w-64 bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl pl-10 pr-4 py-3 text-sm text-white outline-none transition" />
+                        
+                        <form onSubmit={handleSearchSubmit} className="flex gap-2">
+                            <input type="text" value={searchRef} onChange={e => setSearchRef(e.target.value)} placeholder="Cari Kode Referral..." className="bg-slate-900 border border-slate-700 text-white px-4 py-2 rounded-xl text-xs outline-none focus:border-blue-500" />
+                            <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition"><i className="fas fa-search mr-1"></i> Cari</button>
+                        </form>
+                    </div>
+
+                    <div className="glass-panel p-8 rounded-2xl border border-slate-800 flex flex-col items-center relative min-h-[400px]">
+                        {history.length > 0 && (
+                            <button onClick={handleGoUp} className="absolute top-6 left-6 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center"><i className="fas fa-arrow-up mr-2"></i> Naik 1 Level</button>
+                        )}
+
+                        {loading ? (
+                            <div className="my-auto text-center"><i className="fas fa-circle-notch fa-spin text-3xl text-blue-500 mb-2"></i><p className="text-xs text-slate-400">Memuat Struktur Jaringan...</p></div>
+                        ) : (
+                            <div className="w-full flex flex-col items-center">
+                                {/* Root Node */}
+                                <div className="bg-slate-900 border-2 border-yellow-500/80 p-4 rounded-2xl text-center w-64 shadow-xl z-10 relative">
+                                    <div className="w-12 h-12 bg-yellow-500/20 text-yellow-400 rounded-full flex items-center justify-center mx-auto mb-2 border border-yellow-500/40">
+                                        <i className="fas fa-user-shield text-xl"></i>
+                                    </div>
+                                    <h4 className="font-bold text-white text-sm">{treeData.root ? treeData.root.name : rootRef}</h4>
+                                    <span className="bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full inline-block mt-1">ID: {rootRef}</span>
+                                </div>
+
+                                <div className="w-48 h-8 border-t-2 border-l-2 border-r-2 border-slate-700 rounded-t-xl my-0"></div>
+
+                                {/* Downline Branches */}
+                                <div className="flex justify-between w-full max-w-xl gap-6 z-10">
+                                    {/* Left Node */}
+                                    <div className="w-1/2 flex flex-col items-center">
+                                        {treeData.left ? (
+                                            <div onClick={() => handleDrillDown(treeData.left)} className="bg-slate-900 border border-blue-500/50 hover:border-blue-400 p-4 rounded-2xl text-center w-full shadow-lg cursor-pointer transition transform hover:-translate-y-1">
+                                                <div className="w-10 h-10 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-2 border border-blue-500/30">
+                                                    <i className="fas fa-user text-sm"></i>
+                                                </div>
+                                                <p className="text-xs font-bold text-white truncate">{treeData.left.name}</p>
+                                                <p className="text-[10px] text-blue-400 font-mono mt-0.5">ID: {treeData.left.referralCode}</p>
+                                                <p className="text-[9px] text-slate-500 uppercase font-bold mt-2 border-t border-slate-800 pt-1">TIM KIRI</p>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-slate-950/60 border border-slate-800 border-dashed p-6 rounded-2xl text-center w-full">
+                                                <p className="text-xs text-slate-500 font-bold uppercase">Kaki Kiri Kosong</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Right Node */}
+                                    <div className="w-1/2 flex flex-col items-center">
+                                        {treeData.right ? (
+                                            <div onClick={() => handleDrillDown(treeData.right)} className="bg-slate-900 border border-emerald-500/50 hover:border-emerald-400 p-4 rounded-2xl text-center w-full shadow-lg cursor-pointer transition transform hover:-translate-y-1">
+                                                <div className="w-10 h-10 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-2 border border-emerald-500/30">
+                                                    <i className="fas fa-user text-sm"></i>
+                                                </div>
+                                                <p className="text-xs font-bold text-white truncate">{treeData.right.name}</p>
+                                                <p className="text-[10px] text-emerald-400 font-mono mt-0.5">ID: {treeData.right.referralCode}</p>
+                                                <p className="text-[9px] text-slate-500 uppercase font-bold mt-2 border-t border-slate-800 pt-1">TIM KANAN</p>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-slate-950/60 border border-slate-800 border-dashed p-6 rounded-2xl text-center w-full">
+                                                <p className="text-xs text-slate-500 font-bold uppercase">Kaki Kanan Kosong</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminUsers = ({ showToast }) => {
+            const [users, setUsers] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                if (!window.KreaNovaBackend) return;
+                const { db, collection, onSnapshot } = window.KreaNovaBackend;
+
+                const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
+                    const list = [];
+                    snapshot.forEach(docSnap => {
+                        list.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+                    setUsers(list);
+                    setLoading(false);
+                }, (err) => {
+                    console.error("Error fetching users:", err);
+                    setLoading(false);
+                });
+
+                return () => unsub();
+            }, []);
+
+            // Activation Handler
+            const handleActivate = async (user) => {
+                try {
+                    const { db, doc, updateDoc, getDoc, collection, query, where, getDocs } = window.KreaNovaBackend;
+                    
+                    // 1. Update status user
+                    await updateDoc(doc(db, "users", user.id), { status: "ACTIVE" });
+
+                    // 2. Tambahkan bonus 40rb ke sponsor jika ada
+                    if (user.sponsor && user.sponsor !== 'KREANOVA') {
+                        const qSponsor = query(collection(db, "users"), where("referralCode", "==", user.sponsor));
+                        const snapSponsor = await getDocs(qSponsor);
+                        
+                        snapSponsor.forEach(async (spDoc) => {
+                            const spData = spDoc.data();
+                            const newWallet = (spData.walletAvailable || 0) + 40000;
+                            let newLeft = spData.leftDirects || 0;
+                            let newRight = spData.rightDirects || 0;
+
+                            if (user.position === 'KIRI') newLeft += 1;
+                            if (user.position === 'KANAN') newRight += 1;
+
+                            const isQual = newLeft >= 10 && newRight >= 10;
+
+                            await updateDoc(doc(db, "users", spDoc.id), {
+                                walletAvailable: newWallet,
+                                leftDirects: newLeft,
+                                rightDirects: newRight,
+                                isQualified: isQual
+                            });
+                        });
+                    }
+
+                    showToast(`Akun ${user.name} berhasil DIAKTIFKAN!`, 'success');
+                } catch (e) {
+                    showToast("Gagal mengaktifkan: " + e.message, 'error');
+                }
+            };
+
+            // Block Handler
+            const handleBlock = async (user) => {
+                try {
+                    const { db, doc, updateDoc } = window.KreaNovaBackend;
+                    await updateDoc(doc(db, "users", user.id), { status: "BLOCKED" });
+                    showToast(`Akun ${user.name} telah DIBLOKIR!`, 'warning');
+                } catch (e) {
+                    showToast("Gagal memblokir: " + e.message, 'error');
+                }
+            };
+
+            // Unblock / Restore Handler
+            const handleRestore = async (user) => {
+                try {
+                    const { db, doc, updateDoc } = window.KreaNovaBackend;
+                    await updateDoc(doc(db, "users", user.id), { status: "ACTIVE" });
+                    showToast(`Akun ${user.name} berhasil DIPULIHKAN!`, 'success');
+                } catch (e) {
+                    showToast("Gagal memulihkan: " + e.message, 'error');
+                }
+            };
+
+            // Delete Handler
+            const handleDelete = async (user) => {
+                try {
+                    const { db, doc, deleteDoc } = window.KreaNovaBackend;
+                    await deleteDoc(doc(db, "users", user.id));
+                    showToast(`Akun ${user.name} berhasil DIHAPUS dari sistem!`, 'success');
+                } catch (e) {
+                    showToast("Gagal menghapus: " + e.message, 'error');
+                }
+            };
+
+            const filteredUsers = users.filter(u => 
+                (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (u.referralCode && u.referralCode.toLowerCase().includes(searchTerm.toLowerCase()))
+            );
+
+            return (
+                <div className="animate-fade-in space-y-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white tracking-wide"><i className="fas fa-users text-blue-500 mr-2"></i> Database Member</h2>
+                            <p className="text-slate-400 text-xs mt-1">Kelola pendaftaran, aktivasi, pemblokiran, dan pendaftaran pengguna.</p>
+                        </div>
+
+                        <div className="relative w-full md:w-72">
+                            <i className="fas fa-search absolute left-3.5 top-3 text-slate-500 text-xs"></i>
+                            <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Cari nama, email, atau ID..." className="w-full bg-slate-900 border border-slate-700 text-white pl-9 pr-4 py-2.5 rounded-xl text-xs outline-none focus:border-blue-500" />
                         </div>
                     </div>
 
-                    <div className="glass-panel rounded-2xl shadow-lg border-t-4 border-t-blue-500 overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[800px]">
+                    <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="bg-slate-900/80 border-b border-slate-700/50 text-xs uppercase tracking-wider text-slate-400 font-bold">
+                                    <tr className="bg-slate-900/90 text-slate-400 text-[11px] font-bold uppercase tracking-wider border-b border-slate-800">
                                         <th className="p-4">Member</th>
-                                        <th className="p-4 text-center">Sponsor & Posisi</th>
-                                        <th className="p-4 text-center">Tagihan (Rp)</th>
-                                        <th className="p-4 text-center">Status</th>
+                                        <th className="p-4">Sponsor & Posisi</th>
+                                        <th className="p-4">Tagihan</th>
+                                        <th className="p-4">Status</th>
                                         <th className="p-4 text-center">Aksi Manajemen</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-800/50">
+                                <tbody className="divide-y divide-slate-800/60 text-xs">
                                     {loading ? (
-                                        <tr><td colSpan="5" className="p-8 text-center text-slate-500"><i className="fas fa-circle-notch fa-spin text-2xl mb-2"></i><p>Memuat database...</p></td></tr>
-                                    ) : filteredUsers.length === 0 ? (
-                                        <tr><td colSpan="5" className="p-8 text-center text-slate-500"><i className="fas fa-folder-open text-2xl mb-2"></i><p>Belum ada data member ditemukan.</p></td></tr>
-                                    ) : filteredUsers.map((u, i) => (
-                                        <tr key={i} className="hover:bg-slate-800/30 transition-colors">
-                                            <td className="p-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-10 h-10 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center ${u.status === 'BLOCKED' ? 'text-red-400' : 'text-blue-400'}`}>
-                                                        <i className={`fas ${u.status === 'BLOCKED' ? 'fa-user-slash' : 'fa-user'}`}></i>
-                                                    </div>
-                                                    <div>
-                                                        <p className={`text-sm font-bold ${u.status === 'BLOCKED' ? 'text-slate-400 line-through' : 'text-white'}`}>{u.name}</p>
-                                                        <p className="text-[10px] font-mono text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20 inline-block mt-1">ID: {u.referralCode}</p>
-                                                        <p className="text-xs text-slate-400">{u.email}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <p className="text-xs font-mono text-slate-300">{u.sponsor || '-'}</p>
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded mt-1 inline-block ${u.position === 'KIRI' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400'}`}>{u.position}</span>
-                                            </td>
-                                            <td className="p-4 text-center font-mono text-sm text-slate-300">{new Intl.NumberFormat('id-ID').format(u.billAmount || 0)}</td>
-                                            <td className="p-4 text-center">
-                                                {u.status === 'ACTIVE' ? (
-                                                    <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-[10px] font-bold"><i className="fas fa-check mr-1"></i> AKTIF</span>
-                                                ) : u.status === 'BLOCKED' ? (
-                                                    <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1 rounded-full text-[10px] font-bold"><i className="fas fa-ban mr-1"></i> BLOKIR</span>
-                                                ) : (
-                                                    <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-3 py-1 rounded-full text-[10px] font-bold"><i className="fas fa-clock mr-1"></i> PENDING</span>
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <div className="flex items-center justify-center gap-2">
-                                                    {u.status === 'PENDING' && (
-                                                        <button onClick={() => handleActivate(u)} disabled={processingId !== null} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow transition flex items-center">
-                                                            {processingId === u.userId + '-activate' ? <i className="fas fa-spinner fa-spin"></i> : "Aktifkan"}
-                                                        </button>
-                                                    )}
-                                                    {u.status === 'ACTIVE' && (
-                                                        <button onClick={() => handleBlock(u)} disabled={processingId !== null} className="bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow transition flex items-center" title="Blokir Akun">
-                                                            {processingId === u.userId + '-block' ? <i className="fas fa-spinner fa-spin"></i> : <><i className="fas fa-ban mr-1"></i> Blokir</>}
-                                                        </button>
-                                                    )}
-                                                    {u.status === 'BLOCKED' && (
-                                                        <button onClick={() => handleReactivate(u)} disabled={processingId !== null} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow transition flex items-center" title="Pulihkan Akun">
-                                                            {processingId === u.userId + '-reactivate' ? <i className="fas fa-spinner fa-spin"></i> : <><i className="fas fa-unlock mr-1"></i> Pulihkan</>}
-                                                        </button>
-                                                    )}
-                                                    <button onClick={() => handleDelete(u)} disabled={processingId !== null} className="bg-red-950/40 hover:bg-red-600 text-red-400 hover:text-white border border-red-900/50 hover:border-red-600 px-3 py-1.5 rounded text-[10px] font-bold shadow transition flex items-center" title="Hapus Permanen">
-                                                        {processingId === u.userId + '-delete' ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-alt"></i>}
-                                                    </button>
-                                                </div>
+                                        <tr>
+                                            <td colSpan="5" className="p-8 text-center text-slate-500">
+                                                <i className="fas fa-circle-notch fa-spin text-2xl mb-2"></i>
+                                                <p>Memuat Data Member...</p>
                                             </td>
                                         </tr>
-                                    ))}
+                                    ) : filteredUsers.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="5" className="p-8 text-center text-slate-500">
+                                                Tidak ada member ditemukan.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredUsers.map((u) => (
+                                            <tr key={u.id} className="hover:bg-slate-800/40 transition">
+                                                <td className="p-4">
+                                                    <p className="font-bold text-white">{u.name}</p>
+                                                    <p className="text-[10px] text-yellow-500 font-mono mt-0.5">ID: {u.referralCode}</p>
+                                                    <p className="text-[10px] text-slate-400">{u.email}</p>
+                                                </td>
+                                                <td className="p-4">
+                                                    <p className="font-bold text-slate-300">{u.sponsor || 'KREANOVA'}</p>
+                                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded mt-1 inline-block ${u.position === 'KIRI' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>{u.position || 'KIRI'}</span>
+                                                </td>
+                                                <td className="p-4 font-mono font-bold text-white">
+                                                    {formatIDR(u.billAmount)}
+                                                </td>
+                                                <td className="p-4">
+                                                    {u.status === 'PENDING' && <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-full text-[10px] font-bold">MENUNGGU</span>}
+                                                    {u.status === 'ACTIVE' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full text-[10px] font-bold">AKTIF</span>}
+                                                    {u.status === 'BLOCKED' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-2.5 py-1 rounded-full text-[10px] font-bold">DIBLOKIR</span>}
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex items-center justify-center space-x-2">
+                                                        {u.status === 'PENDING' && (
+                                                            <button onClick={() => handleActivate(u)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] shadow transition flex items-center">
+                                                                <i className="fas fa-check mr-1"></i> Aktifkan
+                                                            </button>
+                                                        )}
+                                                        {u.status === 'ACTIVE' && (
+                                                            <button onClick={() => handleBlock(u)} className="bg-amber-600/30 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/40 px-3 py-1.5 rounded-lg font-bold text-[10px] transition flex items-center">
+                                                                <i className="fas fa-ban mr-1"></i> Blokir
+                                                            </button>
+                                                        )}
+                                                        {u.status === 'BLOCKED' && (
+                                                            <button onClick={() => handleRestore(u)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] transition flex items-center">
+                                                                <i className="fas fa-undo mr-1"></i> Pulihkan
+                                                            </button>
+                                                        )}
+                                                        <button onClick={() => handleDelete(u)} className="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40 px-2.5 py-1.5 rounded-lg font-bold text-[10px] transition">
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -368,121 +523,8 @@
             );
         };
 
-        // --- POHON JARINGAN ---
-        const AdminNetworkTree = () => {
-            const [allUsers, setAllUsers] = useState([]);
-            const [viewRoot, setViewRoot] = useState({ name: 'Perusahaan (Master)', referralCode: 'KREANOVA' });
-            const [history, setHistory] = useState([]);
-            const [loading, setLoading] = useState(true);
-
-            useEffect(() => {
-                const fetchAll = async () => {
-                    if(!window.KreaNovaBackend) return;
-                    try {
-                        const { db, collection, getDocs } = window.KreaNovaBackend;
-                        const snap = await getDocs(collection(db, "users"));
-                        const users = [];
-                        snap.forEach(d => users.push(d.data()));
-                        setAllUsers(users);
-                    } catch (e) {
-                        console.error(e);
-                    } finally {
-                        setLoading(false);
-                    }
-                };
-                fetchAll();
-            }, []);
-
-            const leftNode = allUsers.find(u => (u.upline || u.sponsor) === viewRoot.referralCode && u.position === 'KIRI' && u.status === 'ACTIVE');
-            const rightNode = allUsers.find(u => (u.upline || u.sponsor) === viewRoot.referralCode && u.position === 'KANAN' && u.status === 'ACTIVE');
-
-            const handleDrillDown = (node) => {
-                if (!node) return;
-                setHistory([...history, viewRoot]);
-                setViewRoot(node);
-            };
-
-            const handleGoUp = () => {
-                if (history.length === 0) return;
-                const newHist = [...history];
-                const prev = newHist.pop();
-                setHistory(newHist);
-                setViewRoot(prev);
-            };
-
-            const renderNode = (nodeData, position) => {
-                if (loading) {
-                    return <div className="w-[45%] text-center py-4"><i className="fas fa-circle-notch fa-spin text-slate-500"></i></div>;
-                }
-                
-                if (nodeData) {
-                    return (
-                        <div className="flex flex-col items-center w-[45%] cursor-pointer group" onClick={() => handleDrillDown(nodeData)}>
-                            <div className="w-0.5 h-6 bg-slate-600 mb-0"></div>
-                            <div className="bg-slate-800/80 border-2 border-emerald-500/50 p-4 rounded-xl w-full text-center hover:bg-slate-700 hover:scale-105 transition shadow-lg relative">
-                                <div className="w-8 h-8 mx-auto bg-emerald-600 rounded-full flex items-center justify-center mb-2 shadow-inner">
-                                    <i className="fas fa-user text-white text-xs"></i>
-                                </div>
-                                <p className="text-xs text-white font-bold truncate">{nodeData.name}</p>
-                                <p className="text-[10px] text-emerald-400 font-mono mt-1">ID: {nodeData.referralCode}</p>
-                            </div>
-                            <div className="w-16 h-4 border-t border-l border-r border-slate-700 mt-0 opacity-50"></div>
-                        </div>
-                    );
-                }
-
-                return (
-                    <div className="flex flex-col items-center w-[45%]">
-                        <div className="w-0.5 h-6 bg-slate-600 mb-0"></div>
-                        <div className="bg-slate-900/50 border border-slate-700 border-dashed p-4 rounded-xl text-center w-full shadow-lg relative">
-                            <p className="text-xs text-slate-500 uppercase font-bold py-4">Tim {position}<br/>(Kosong)</p>
-                        </div>
-                    </div>
-                );
-            };
-
-            return (
-                <div className="animate-fade-in h-full flex flex-col">
-                    <h2 className="text-2xl font-bold text-white mb-6"><i className="fas fa-sitemap text-yellow-500 mr-2"></i> Visualisasi Jaringan Binary</h2>
-                    <div className="glass-panel flex-1 rounded-2xl shadow-lg p-8 flex flex-col items-center justify-start overflow-auto custom-scrollbar relative">
-                        
-                        {history.length > 0 && (
-                            <button onClick={handleGoUp} className="absolute top-8 left-8 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-bold shadow-md transition flex items-center">
-                                <i className="fas fa-arrow-up mr-2"></i> Kembali Naik
-                            </button>
-                        )}
-
-                        <div className="flex flex-col items-center mt-4">
-                            <div className="tree-node tree-root">
-                                <div className={`w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(250,204,21,0.5)] border-4 ${history.length > 0 ? 'border-blue-500' : 'border-yellow-500'} z-10`}>
-                                    {history.length === 0 ? (
-                                        <img src="IMG_20260820_224441.jpg" alt="Logo" className="w-full h-full rounded-full object-cover" onError={(e) => e.target.style.display='none'} />
-                                    ) : (
-                                        <i className="fas fa-user-tie text-3xl text-white"></i>
-                                    )}
-                                </div>
-                                <p className="text-sm font-bold text-white mt-3">{viewRoot.name}</p>
-                                <p className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded border border-yellow-500/30 mt-1">ID: {viewRoot.referralCode}</p>
-                            </div>
-                            
-                            <div className="w-full h-10 border-t-2 border-l-2 border-r-2 border-slate-600 rounded-t-xl mx-auto flex justify-between px-16 relative mt-2" style={{width: '380px'}}></div>
-                            
-                            <div className="flex justify-between w-full" style={{width: '450px'}}>
-                                {renderNode(leftNode, 'KIRI')}
-                                {renderNode(rightNode, 'KANAN')}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- 4. CMS TAUTAN + TRIPAY ---
         const AdminLinks = ({ showToast }) => {
-            const [isSaving, setIsSaving] = useState(false);
-            const [tripayLink, setTripayLink] = useState('');
-            const [bannerText, setBannerText] = useState(''); // MENGGANTI bannerLink MENJADI bannerText
-            const [mainMenus, setMainMenus] = useState([
+            const [menus, setMenus] = useState([
                 { id: 1, name: 'Tutorial Penggunaan GenAI', url: '' },
                 { id: 2, name: 'Affiliate Produk', url: '' },
                 { id: 3, name: 'Drama Short', url: '' },
@@ -491,149 +533,108 @@
                 { id: 6, name: 'Animal Creature', url: '' },
                 { id: 7, name: 'Animal Human Activity', url: '' }
             ]);
+            const [bannerText, setBannerText] = useState('');
+            const [tripayLink, setTripayLink] = useState('');
+            const [saving, setSaving] = useState(false);
 
             useEffect(() => {
-                const fetchLinks = async () => {
-                    if(!window.KreaNovaBackend) return;
+                const fetchGlobalLinks = async () => {
+                    if (!window.KreaNovaBackend) return;
                     try {
                         const { db, doc, getDoc } = window.KreaNovaBackend;
                         const docSnap = await getDoc(doc(db, "settings", "global_links"));
                         if (docSnap.exists()) {
                             const data = docSnap.data();
-                            if (data.mainMenus && Array.isArray(data.mainMenus) && data.mainMenus.length > 0) {
-                                setMainMenus(data.mainMenus);
-                            }
-                            if (data.tripayLink) setTripayLink(data.tripayLink);
+                            if (data.mainMenus) setMenus(data.mainMenus);
                             if (data.bannerText !== undefined) setBannerText(data.bannerText);
-                            else if (data.bannerLink) setBannerText(data.bannerLink); // Fallback ke data lama jika ada
+                            if (data.tripayLink !== undefined) setTripayLink(data.tripayLink);
                         }
-                    } catch (e) { console.warn("Pratinjau Offline: Memuat tautan bawaan."); }
+                    } catch (e) {
+                        console.error("Error fetching global links:", e);
+                    }
                 };
-                fetchLinks();
+                fetchGlobalLinks();
             }, []);
 
             const handleMenuChange = (index, field, value) => {
-                const newMenus = [...mainMenus];
-                newMenus[index][field] = value;
-                setMainMenus(newMenus);
+                const updated = [...menus];
+                updated[index][field] = value;
+                setMenus(updated);
             };
 
-            const addMenuSlot = () => {
-                setMainMenus([...mainMenus, { id: Date.now(), name: `Menu Baru ${mainMenus.length + 1}`, url: '' }]);
-            };
-
-            const removeMenuSlot = (index) => {
-                setMainMenus(mainMenus.filter((_, i) => i !== index));
-            };
-
-            const handleSave = async () => {
-                setIsSaving(true);
-                if(!window.KreaNovaBackend) { showToast('Gagal terhubung ke Firebase', 'error'); setIsSaving(false); return; }
+            const handleSave = async (e) => {
+                e.preventDefault();
+                setSaving(true);
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
-                    await setDoc(doc(db, "settings", "global_links"), { 
-                        mainMenus,
-                        tripayLink,
-                        bannerText // MENYIMPAN SEBAGAI TEKS NASKAH
+                    await setDoc(doc(db, "settings", "global_links"), {
+                        mainMenus: menus,
+                        bannerText: bannerText,
+                        tripayLink: tripayLink,
+                        updatedAt: new Date().toISOString()
                     });
-                    showToast('Sukses! Semua link & Pengumuman berhasil di-deploy.', 'success');
-                } catch (e) { showToast('Gagal menyimpan: ' + e.message, 'error'); }
-                setIsSaving(false);
+                    showToast("Pengaturan Tautan & Banner Berhasil Disimpan!", "success");
+                } catch (err) {
+                    showToast("Gagal menyimpan: " + err.message, "error");
+                } finally {
+                    setSaving(false);
+                }
             };
 
             return (
-                <div className="animate-fade-in max-w-5xl space-y-6 pb-10">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4">
-                        <div>
-                            <h2 className="text-2xl font-bold text-white mb-2"><i className="fas fa-link text-blue-500 mr-2"></i> CMS Tautan Global</h2>
-                            <p className="text-sm text-slate-400">Ubah link di sini, dan semua perangkat member akan otomatis berubah seketika.</p>
-                        </div>
-                        <button onClick={handleSave} disabled={isSaving} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-blue-500/30 transition transform hover:-translate-y-1 w-full md:w-auto">
-                            {isSaving ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-cloud-upload-alt mr-2"></i>}
-                            {isSaving ? 'Menyimpan...' : 'Deploy Perubahan'}
-                        </button>
+                <div className="animate-fade-in space-y-6 pb-12">
+                    <div>
+                        <h2 className="text-2xl font-bold text-white tracking-wide"><i className="fas fa-link text-blue-500 mr-2"></i> Manajemen Tautan & Konten</h2>
+                        <p className="text-slate-400 text-xs mt-1">Atur link modul AI Studio, teks pengumuman banner, dan link pembayaran Tripay.</p>
                     </div>
 
-                    {/* KARTU BANNER POPUP TENGAH */}
-                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-yellow-500">
-                        <h3 className="text-xl font-bold text-white mb-4 flex items-center border-b border-slate-700/50 pb-4">
-                            <i className="fas fa-file-alt text-yellow-400 mr-3"></i> Banner Pop-up (Teks Informasi)
-                        </h3>
-                        <div className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 transition-all hover:border-yellow-500/50 shadow-sm relative overflow-hidden">
-                            <div className="mb-2 relative z-10">
-                                <label className="text-xs font-bold text-yellow-400 uppercase tracking-wider block mb-1">Naskah Pengumuman</label>
-                                <p className="text-[10px] text-slate-400 mb-4">Ketik informasi, peraturan, atau promosi. Teks ini akan muncul saat member menekan logo KreaNova di tengah navigasi bawah.</p>
-                                <textarea 
-                                    value={bannerText} 
-                                    onChange={(e) => setBannerText(e.target.value)} 
-                                    placeholder="Tuliskan pengumuman di sini..." 
-                                    className="w-full bg-slate-950 border border-slate-700 focus:border-yellow-500 rounded-lg p-3 text-sm text-white outline-none transition custom-scrollbar min-h-[120px] resize-y" 
-                                ></textarea>
+                    <form onSubmit={handleSave} className="space-y-6">
+                        {/* Banner Popup Naskah */}
+                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-yellow-500 space-y-3">
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center">
+                                <i className="fas fa-bullhorn text-yellow-500 mr-2"></i> Banner Informasi Pop-up (Teks Naskah)
+                            </h3>
+                            <p className="text-xs text-slate-400">Naskah teks ini akan dibaca oleh pengguna saat menekan logo KreaNova AI di tengah bawah dashboard.</p>
+                            <textarea value={bannerText} onChange={e => setBannerText(e.target.value)} rows="5" placeholder="Masukkan naskah pengumuman atau instruksi di sini..." className="w-full bg-slate-900 border border-slate-700 text-white p-4 rounded-xl text-xs outline-none focus:border-yellow-500 custom-scrollbar"></textarea>
+                        </div>
+
+                        {/* Tripay Gateway */}
+                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-emerald-500 space-y-3">
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center">
+                                <i className="fas fa-credit-card text-emerald-500 mr-2"></i> Tautan Payment Gateway (Tripay)
+                            </h3>
+                            <p className="text-xs text-slate-400">Tautan pembayaran untuk member pending melakukan pembayaran aktivasi.</p>
+                            <input type="url" value={tripayLink} onChange={e => setTripayLink(e.target.value)} placeholder="https://tripay.co.id/checkout/..." className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl text-xs outline-none focus:border-emerald-500" />
+                        </div>
+
+                        {/* AI Studio Moduls */}
+                        <div className="glass-panel p-6 rounded-2xl border-t-4 border-t-blue-500 space-y-4">
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center">
+                                <i className="fas fa-robot text-blue-500 mr-2"></i> Modul AI Studio (10 Menu)
+                            </h3>
+
+                            <div className="space-y-3">
+                                {menus.map((m, idx) => (
+                                    <div key={idx} className="flex flex-col sm:flex-row gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800 items-center">
+                                        <span className="w-7 h-7 bg-blue-500/20 text-blue-400 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">{idx + 1}</span>
+                                        <input type="text" value={m.name} onChange={e => handleMenuChange(idx, 'name', e.target.value)} placeholder="Nama Modul" className="w-full sm:w-1/3 bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg text-xs outline-none focus:border-blue-500" />
+                                        <input type="url" value={m.url || ''} onChange={e => handleMenuChange(idx, 'url', e.target.value)} placeholder="https://..." className="w-full sm:flex-1 bg-slate-950 border border-slate-700 text-white px-3 py-2 rounded-lg text-xs outline-none focus:border-blue-500" />
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                    </div>
 
-                    {/* KARTU TRIPAY PAYMENT GATEWAY */}
-                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-blue-500 mt-6">
-                        <h3 className="text-xl font-bold text-white mb-4 flex items-center border-b border-slate-700/50 pb-4">
-                            <i className="fas fa-credit-card text-blue-400 mr-3"></i> Payment Gateway (Tripay)
-                        </h3>
-                        <div className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 transition-all hover:border-blue-500/50 shadow-sm relative overflow-hidden">
-                            <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/10 rounded-full blur-xl pointer-events-none"></div>
-                            <div className="mb-2 relative z-10">
-                                <label className="text-xs font-bold text-blue-400 uppercase tracking-wider block mb-1">Link URL Payment Tripay (Pendaftaran)</label>
-                                <p className="text-[10px] text-slate-400 mb-4">Tautan ini akan diarahkan secara otomatis saat calon member mengklik tombol pendaftaran/pembayaran di web utama.</p>
-                                <input 
-                                    type="text" 
-                                    value={tripayLink} 
-                                    onChange={(e) => setTripayLink(e.target.value)} 
-                                    placeholder="https://tripay.co.id/checkout/..." 
-                                    className="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 rounded-lg p-3 text-sm text-white outline-none transition" 
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* KARTU MENU UTAMA */}
-                    <div className="glass-panel p-6 md:p-8 rounded-2xl shadow-lg border-t-4 border-t-emerald-500 mt-6">
-                        <h3 className="text-xl font-bold text-white mb-6 flex items-center justify-between border-b border-slate-700/50 pb-4">
-                            <div><i className="fas fa-th-list text-emerald-400 mr-2"></i> 10 Menu Utama KreaNova AI</div>
-                            <span className="bg-emerald-500/20 text-emerald-400 text-xs px-3 py-1 rounded-full font-bold">{mainMenus.length} Slot Aktif</span>
-                        </h3>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {mainMenus.map((menu, index) => (
-                                <div key={menu.id} className="bg-slate-900/50 p-5 rounded-xl border border-slate-700 relative group transition-all hover:border-emerald-500/50 shadow-sm">
-                                    {mainMenus.length > 1 && (
-                                        <button onClick={() => removeMenuSlot(index)} className="absolute -top-3 -right-3 bg-red-500 text-white w-7 h-7 rounded-full text-xs shadow-lg opacity-0 group-hover:opacity-100 transition hover:bg-red-600 z-10 tooltip" title="Hapus Slot">
-                                            <i className="fas fa-times"></i>
-                                        </button>
-                                    )}
-                                    
-                                    <div className="mb-4">
-                                        <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider block mb-1">Nama Slot {index + 1}</label>
-                                        <input type="text" value={menu.name} onChange={(e) => handleMenuChange(index, 'name', e.target.value)} className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg p-3 text-sm text-white outline-none transition" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Link URL</label>
-                                        <input type="text" value={menu.url} onChange={(e) => handleMenuChange(index, 'url', e.target.value)} placeholder="https://..." className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg p-3 text-sm text-white outline-none transition" />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        
-                        <button onClick={addMenuSlot} className="w-full mt-8 py-4 border-2 border-dashed border-emerald-500/30 text-emerald-400 font-bold rounded-xl hover:bg-emerald-500/10 transition flex items-center justify-center group">
-                            <i className="fas fa-plus mr-2 group-hover:scale-125 transition-transform"></i>Tambah Slot
+                        <button type="submit" disabled={saving} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 transition transform hover:-translate-y-0.5">
+                            {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <><i className="fas fa-save mr-2"></i> Simpan Semua Perubahan</>}
                         </button>
-                    </div>
+                    </form>
                 </div>
             );
         };
 
-        // --- 5. KEUANGAN (WD) ---
         const AdminWD = () => (
-            <div className="animate-fade-in">
-                <h2 className="text-2xl font-bold text-white mb-6"><i className="fas fa-money-bill-wave text-blue-500 mr-2"></i> Eksekusi Withdrawal (WD)</h2>
+            <div className="animate-fade-in space-y-6">
+                <h2 className="text-2xl font-bold text-white"><i className="fas fa-money-bill-wave text-blue-500 mr-2"></i> Eksekusi Withdrawal (WD)</h2>
                 <div className="glass-panel p-8 rounded-2xl border-t-4 border-t-orange-500 text-center">
                     <i className="fas fa-check-circle text-5xl text-emerald-500 mb-4"></i>
                     <h3 className="text-xl font-bold text-white mb-2">Semua Pembayaran Selesai</h3>
@@ -642,109 +643,170 @@
             </div>
         );
 
-        // --- STRUKTUR UTAMA APLIKASI ---
+        const AdminLogin = ({ onLogin }) => {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (username === 'admin' && password === 'admin1980') {
+                    onLogin();
+                } else {
+                    setError('Username atau Password salah!');
+                }
+            };
+
+            return (
+                <div className="min-h-screen w-full flex items-center justify-center bg-[#0b0f19] p-4 relative">
+                    <div className="glass-panel p-8 rounded-2xl shadow-2xl w-full max-w-md border-t-4 border-t-blue-500 animate-slide-up">
+                        <div className="text-center mb-8">
+                            <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center border border-yellow-500/50 mx-auto mb-4 shadow-[0_0_20px_rgba(250,204,21,0.2)]">
+                                <i className="fas fa-user-shield text-3xl text-yellow-500"></i>
+                            </div>
+                            <h2 className="text-2xl font-bold text-white glow-text mb-1">Portal Admin</h2>
+                            <p className="text-sm text-slate-400">Silakan login untuk mengakses sistem</p>
+                        </div>
+                        {error && (
+                            <div className="bg-red-500/10 border border-red-500/50 text-red-500 text-sm p-3 rounded-lg mb-6 text-center flex items-center justify-center">
+                                <i className="fas fa-exclamation-circle mr-2"></i>{error}
+                            </div>
+                        )}
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2"><i className="fas fa-user mr-1"></i> Username</label>
+                                <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-4 py-3.5 text-white outline-none transition" placeholder="Masukkan username" required />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2"><i className="fas fa-lock mr-1"></i> Password</label>
+                                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-slate-900 border border-slate-700 focus:border-blue-500 rounded-xl px-4 py-3.5 text-white outline-none transition" placeholder="••••••••" required />
+                            </div>
+                            <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/30 mt-4 transition transform hover:-translate-y-0.5">
+                                Masuk ke Dasbor
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
-            const [activeMenu, setActiveMenu] = useState('links'); 
+            const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('adminLoggedIn') === 'true');
+            const [activeMenu, setActiveMenu] = useState('dashboard');
             const [toast, setToast] = useState(null);
             const [pendingCount, setPendingCount] = useState(0);
-            const [lastPendingUsers, setLastPendingUsers] = useState([]);
+
             const showToast = (msg, type) => setToast({ msg, type });
 
-            // Real-time listener untuk notifikasi pendaftar baru
-            useEffect(() => {
-                if (!window.KreaNovaBackend) return;
-                const { db, collection, query, where, onSnapshot } = window.KreaNovaBackend;
-                
-                const q = query(collection(db, "users"), where("status", "==", "PENDING"));
-                
-                const unsubscribe = onSnapshot(q, (snapshot) => {
-                    const currentPending = [];
-                    snapshot.forEach(doc => {
-                        currentPending.push(doc.data());
-                    });
-                    
-                    setPendingCount(currentPending.length);
+            const handleLogin = () => {
+                sessionStorage.setItem('adminLoggedIn', 'true');
+                setIsLoggedIn(true);
+            };
 
-                    // Deteksi jika ada user BARU yang masuk (bukan sekadar data pertama kali diload)
-                    if (lastPendingUsers.length > 0 && currentPending.length > lastPendingUsers.length) {
-                        // Cari user baru untuk ditampilkan di toast
-                        const newUsers = currentPending.filter(cu => !lastPendingUsers.find(lu => lu.userId === cu.userId));
-                        if (newUsers.length > 0) {
-                            showToast(`Ada pendaftar baru! ${newUsers[0].name} menunggu aktivasi.`, 'success');
-                            
-                            // Mainkan suara notifikasi
-                            try {
-                                const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-                                audio.play().catch(e => console.log("Browser memblokir auto-play suara."));
-                            } catch (err) {}
-                        }
-                    }
-                    setLastPendingUsers(currentPending);
-                    
+            const handleLogout = () => {
+                sessionStorage.removeItem('adminLoggedIn');
+                setIsLoggedIn(false);
+            };
+
+            // Real-time listener untuk notifikasi pending member
+            useEffect(() => {
+                if (!window.KreaNovaBackend || !isLoggedIn) return;
+                const { db, collection, query, where, onSnapshot } = window.KreaNovaBackend;
+
+                const q = query(collection(db, "users"), where("status", "==", "PENDING"));
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    setPendingCount(snapshot.size);
                 }, (error) => {
-                    console.error("Error mendengarkan notifikasi:", error);
+                    console.error("Error notification listener:", error);
                 });
 
                 return () => unsubscribe();
-            }, [lastPendingUsers]);
+            }, [isLoggedIn]);
+
+            if (!isLoggedIn) {
+                return <AdminLogin onLogin={handleLogin} />;
+            }
 
             return (
-                <div className="h-screen w-full flex bg-[#0b0f19] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] overflow-hidden">
+                <div className="h-screen w-full flex bg-[#0b0f19] overflow-hidden">
                     {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-                    
-                    {/* SIDEBAR */}
-                    <aside className="w-20 lg:w-72 glass-panel border-r border-slate-800/50 flex flex-col z-20">
-                        <div className="h-20 flex items-center justify-center lg:justify-start lg:px-6 border-b border-slate-800/50 shrink-0">
-                            <img src="IMG_20260820_224441.jpg" alt="Logo" className="w-10 h-10 rounded-xl shadow-[0_0_15px_rgba(234,179,8,0.3)] border border-yellow-500/50" onError={(e) => e.target.style.display='none'} />
-                            <div className="ml-3 hidden lg:block"><h1 className="font-black text-lg text-white glow-text">KreaNova AI</h1><p className="text-[10px] font-bold text-yellow-500 tracking-widest">Admin Portal</p></div>
+
+                    {/* Sidebar */}
+                    <aside className="w-72 bg-[#0d1323]/95 backdrop-blur-xl border-r border-slate-800 flex flex-col z-20 shadow-2xl shrink-0">
+                        <div className="p-6 border-b border-slate-800 flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-slate-900 rounded-xl border border-yellow-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(250,204,21,0.2)]">
+                                <i className="fas fa-robot text-2xl text-yellow-500"></i>
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold text-white tracking-wide glow-text">KreaNova AI</h1>
+                                <p className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest mt-0.5">Admin Portal</p>
+                            </div>
                         </div>
-                        <nav className="flex-1 overflow-y-auto py-6 flex flex-col gap-2 px-3 custom-scrollbar">
-                            <button onClick={() => setActiveMenu('dashboard')} className={`flex items-center p-3 rounded-xl group ${activeMenu === 'dashboard' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800'}`}><i className="fas fa-chart-pie w-6 text-center text-lg"></i><span className="ml-3 font-semibold hidden lg:block">Dashboard</span></button>
-                            <button onClick={() => setActiveMenu('network')} className={`flex items-center p-3 rounded-xl group ${activeMenu === 'network' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800'}`}><i className="fas fa-sitemap w-6 text-center text-lg"></i><span className="ml-3 font-semibold hidden lg:block">Pohon Jaringan</span></button>
-                            <button onClick={() => setActiveMenu('users')} className={`relative flex items-center p-3 rounded-xl group ${activeMenu === 'users' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800'}`}>
-                                <i className="fas fa-users-cog w-6 text-center text-lg"></i>
-                                <span className="ml-3 font-semibold hidden lg:block">Database Member</span>
-                                {pendingCount > 0 && (
-                                    <span className="absolute right-3 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg animate-pulse">{pendingCount}</span>
-                                )}
+
+                        <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+                            <button onClick={() => setActiveMenu('dashboard')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${activeMenu === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
+                                <i className="fas fa-chart-pie w-6"></i> Dashboard
                             </button>
-                            <button onClick={() => setActiveMenu('links')} className={`flex items-center p-3 rounded-xl group ${activeMenu === 'links' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800'}`}><i className="fas fa-link w-6 text-center text-lg"></i><span className="ml-3 font-semibold hidden lg:block">Manajemen Tautan</span></button>
-                            <button onClick={() => setActiveMenu('finance')} className={`flex items-center p-3 rounded-xl group ${activeMenu === 'finance' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800'}`}><i className="fas fa-money-bill-wave w-6 text-center text-lg"></i><span className="ml-3 font-semibold hidden lg:block">Keuangan (WD)</span></button>
+                            <button onClick={() => setActiveMenu('network')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${activeMenu === 'network' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
+                                <i className="fas fa-sitemap w-6"></i> Pohon Jaringan
+                            </button>
+                            <button onClick={() => setActiveMenu('users')} className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${activeMenu === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
+                                <div className="flex items-center"><i className="fas fa-users w-6"></i> Database Member</div>
+                                {pendingCount > 0 && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">{pendingCount}</span>}
+                            </button>
+                            <button onClick={() => setActiveMenu('links')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${activeMenu === 'links' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
+                                <i className="fas fa-link w-6"></i> Manajemen Tautan
+                            </button>
+                            <button onClick={() => setActiveMenu('wd')} className={`w-full flex items-center px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${activeMenu === 'wd' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
+                                <i className="fas fa-money-bill-wave w-6"></i> Keuangan (WD)
+                            </button>
                         </nav>
-                        <div className="p-4 border-t border-slate-800/50">
-                            <button className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-red-400 hover:bg-red-500/10 transition"><i className="fas fa-sign-out-alt w-6 text-center"></i><span className="ml-3 font-semibold hidden lg:block">Keluar</span></button>
+
+                        <div className="p-4 border-t border-slate-800">
+                            <button onClick={handleLogout} className="w-full flex items-center justify-center space-x-2 bg-slate-800/50 hover:bg-red-500/20 text-slate-400 hover:text-red-400 px-4 py-3 rounded-xl text-sm font-semibold transition-all border border-transparent hover:border-red-500/30">
+                                <i className="fas fa-sign-out-alt"></i> <span>Keluar</span>
+                            </button>
                         </div>
                     </aside>
-                    
-                    {/* AREA UTAMA */}
-                    <main className="flex-1 flex flex-col overflow-hidden relative">
-                        <header className="h-20 glass-panel border-b border-slate-800/50 flex items-center justify-between px-8 z-10 shrink-0">
-                            <div className="flex items-center text-slate-400 text-sm font-medium"><span>Super Admin</span> <i className="fas fa-chevron-right mx-3 text-xs opacity-50"></i> <span className="text-blue-400 capitalize">{activeMenu}</span></div>
-                            <div className="flex items-center gap-5">
-                                <button onClick={() => { if(pendingCount > 0) setActiveMenu('users'); }} className="text-slate-400 hover:text-white relative transition-colors">
-                                    <i className="fas fa-bell text-xl"></i>
-                                    {pendingCount > 0 && (
-                                        <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-[0_0_10px_rgba(239,68,68,0.6)] animate-pulse">{pendingCount}</span>
-                                    )}
-                                </button>
-                                <div className="h-8 w-px bg-slate-700"></div>
-                                <div className="flex items-center gap-3">
-                                    <div className="text-right hidden sm:block"><p className="text-sm font-bold text-white leading-none mb-1">DELTAFORCE</p><p className="text-[10px] text-yellow-500 font-bold uppercase">Founder</p></div>
-                                    <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center text-white"><i className="fas fa-user-shield"></i></div>
+
+                    {/* Main Workspace */}
+                    <main className="flex-1 flex flex-col min-w-0">
+                        <header className="h-20 border-b border-slate-800 flex items-center justify-between px-8 bg-[#0b0f19]/80 backdrop-blur-md z-10 shrink-0">
+                            <div className="text-slate-400 text-sm font-medium">
+                                <span className="text-blue-500">Super Admin</span> <i className="fas fa-chevron-right text-[10px] mx-2 opacity-50"></i> <span className="capitalize">{activeMenu === 'wd' ? 'Keuangan' : activeMenu}</span>
+                            </div>
+
+                            <div className="flex items-center space-x-6">
+                                <div className="relative cursor-pointer" onClick={() => setActiveMenu('users')}>
+                                    <i className="fas fa-bell text-slate-400 text-xl hover:text-white transition"></i>
+                                    {pendingCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#0b0f19] animate-pulse"></span>}
+                                </div>
+                                <div className="flex items-center space-x-3 pl-6 border-l border-slate-700">
+                                    <div className="text-right">
+                                        <p className="text-sm font-bold text-white">DELTAFORCE</p>
+                                        <p className="text-[10px] text-yellow-500 font-bold uppercase tracking-wider">Founder</p>
+                                    </div>
+                                    <div className="w-10 h-10 bg-gradient-to-tr from-slate-700 to-slate-600 rounded-full flex items-center justify-center border border-slate-500">
+                                        <i className="fas fa-user-shield text-white text-sm"></i>
+                                    </div>
                                 </div>
                             </div>
                         </header>
-                        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar pb-32">
-                            {activeMenu === 'dashboard' && <DashboardOverview />}
-                            {activeMenu === 'network' && <AdminNetworkTree />}
-                            {activeMenu === 'users' && <AdminUsers showToast={showToast} />}
-                            {activeMenu === 'links' && <AdminLinks showToast={showToast} />}
-                            {activeMenu === 'finance' && <AdminWD />}
+
+                        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                            <div className="max-w-7xl mx-auto">
+                                {activeMenu === 'dashboard' && <DashboardOverview />}
+                                {activeMenu === 'network' && <AdminNetworkTree />}
+                                {activeMenu === 'users' && <AdminUsers showToast={showToast} />}
+                                {activeMenu === 'links' && <AdminLinks showToast={showToast} />}
+                                {activeMenu === 'wd' && <AdminWD />}
+                            </div>
                         </div>
                     </main>
                 </div>
             );
         };
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
