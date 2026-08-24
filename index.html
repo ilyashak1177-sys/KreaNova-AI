@@ -85,7 +85,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             })
             .then(res => res.json())
             .then(data => {
-                if (!data.ok) console.error("Gagal dikirim ke Telegram:", data.description);
+                if (!data.ok) console.error("Gagal dikirim ke Telegram (Ditolak API):", data.description);
             })
             .catch(e => console.error("Gagal terhubung ke server Telegram:", e));
         };
@@ -255,8 +255,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
                     const finalSponsor = (!sponsor || sponsor.trim() === '') ? 'KREANOVA' : sponsor.trim().toUpperCase();
                     
-                    // --- ALGORITMA AUTO-SPILLOVER TINGKAT TINGGI (Limpahan Bawah Absolut) ---
-                    // Menggunakan filter JavaScript untuk menjamin 100% tidak ada kegagalan indeks query
                     let currentUplineCode = finalSponsor;
                     let assignedPosition = position; 
 
@@ -272,14 +270,11 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         });
                         
                         if (!childAtPosition) {
-                            // Slot benar-benar kosong! Berhenti mencari dan tempatkan di sini.
                             break;
                         } else {
-                            // Slot terisi, turun ke kedalaman berikutnya di kaki yang sama (Limpahan Kaki Luar)
                             currentUplineCode = childAtPosition.referralCode;
                         }
                     }
-                    // ---------------------------------------------------
 
                     const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
                     const uniqueCode = Math.floor(Math.random() * 900) + 100;
@@ -291,7 +286,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         email: email,
                         phone: phone,
                         sponsor: finalSponsor,
-                        upline: currentUplineCode, // Hasil Spillover Absolut
+                        upline: currentUplineCode, 
                         position: assignedPosition,
                         sponsorLeg: position, 
                         referralCode: refCode,
@@ -378,21 +373,60 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
         const Dashboard = ({ user }) => {
             const [copied, setCopied] = useState(false);
+            const [stats, setStats] = useState({ left: 0, right: 0, total: 0, activeSponsor: 0, activePairs: 0 });
             
-            // Domain Dikunci Paten (Vercel Asli)
+            // PERBAIKAN: Hitung real-time dari database untuk statistik
+            useEffect(() => {
+                let isMounted = true;
+                if (!window.KreaNovaBackend || !user?.referralCode) return;
+                
+                const fetchStats = async () => {
+                    try {
+                        const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
+                        const q = query(collection(db, "users"), where("sponsor", "==", user.referralCode));
+                        const snap = await getDocs(q);
+                        
+                        let left = 0, right = 0;
+                        let activeLeft = 0, activeRight = 0;
+                        let activeTotal = 0;
+
+                        snap.forEach(doc => {
+                            const data = doc.data();
+                            const leg = data.sponsorLeg || data.position;
+                            if (leg === 'KIRI') {
+                                left++;
+                                if (data.status === 'ACTIVE') { activeLeft++; activeTotal++; }
+                            }
+                            if (leg === 'KANAN') {
+                                right++;
+                                if (data.status === 'ACTIVE') { activeRight++; activeTotal++; }
+                            }
+                        });
+                        
+                        if(isMounted) {
+                            setStats({ 
+                                left, 
+                                right, 
+                                total: left + right,
+                                activeSponsor: activeTotal,
+                                activePairs: Math.floor(Math.min(activeLeft, activeRight) / 5)
+                            });
+                        }
+                    } catch(e) { console.error("Error fetching live stats:", e); }
+                };
+                
+                fetchStats();
+                return () => { isMounted = false; };
+            }, [user?.referralCode]);
+
             const fullLink = `https://krea-nova-ai.vercel.app/?ref=${user?.referralCode || ''}`;
             
-            // Naskah Copywriting Profesional untuk dibagikan tanpa embel-embel judul URL
             const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!\n\nDapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.\n\n✅ Modul AI Lengkap\n✅ Komunitas Solid\n✅ Potensi Income Tanpa Batas\n\nDaftar sekarang melalui link resmi:\n${fullLink}`;
 
             const handleCopy = () => {
                 if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(fullLink)
-                        .then(() => showCopied())
-                        .catch(() => fallbackCopy());
-                } else {
-                    fallbackCopy();
-                }
+                    navigator.clipboard.writeText(fullLink).then(() => showCopied()).catch(() => fallbackCopy());
+                } else { fallbackCopy(); }
             };
 
             const fallbackCopy = () => {
@@ -411,14 +445,13 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
             const handleShare = () => {
                 if (navigator.share) {
-                    // Hanya mengirim text murni tanpa title/url agar tidak berantakan di WhatsApp
                     navigator.share({ text: shareText }).catch(console.error);
                 }
             };
 
-            const totalReferral = (user?.leftDirects || 0) + (user?.rightDirects || 0);
-            const totalBonusSponsor = totalReferral * 40000;
-            const qualifiedPairs = user?.qualifiedPairs || 0;
+            const totalBonusSponsor = stats.activeSponsor * 40000;
+            const totalBonusQualified = stats.activePairs * 50000;
+            const totalKomisiBulanIni = totalBonusSponsor + totalBonusQualified;
 
             return (
                 <div className="bg-white -m-4 p-5 min-h-[100dvh] animate-fade-in pb-24 text-slate-900 font-sans">
@@ -488,22 +521,31 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-medal text-sm"></i></div>
                                  <p className="text-[10px] font-bold leading-tight">Bonus<br/>Qualified</p>
                              </div>
-                             <p className="font-black text-sm pl-1">Level: <span className="text-yellow-600">{user?.isQualified ? 'Gold' : 'Basic'}</span></p>
-                             {qualifiedPairs > 0 && <p className="text-[9px] text-slate-500 pl-1 mt-0.5">{qualifiedPairs} Pasang Siklus</p>}
+                             {/* PERBAIKAN: Hilangkan Level Basic, diganti dengan Rupiah 0 dan uraian pencapaian Kiri/Kanan */}
+                             <p className="font-black text-sm pl-1">{formatIDR(totalBonusQualified)}</p>
+                             <div className="text-[9px] text-slate-600 pl-1 mt-1 font-semibold space-y-0.5">
+                                 <p>Posisi Kiri : {stats.left}</p>
+                                 <p>Posisi Kanan : {stats.right}</p>
+                             </div>
                         </div>
                         <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-users text-sm"></i></div>
                                  <p className="text-[10px] font-bold leading-tight">Jumlah<br/>Referral</p>
                              </div>
-                             <p className="font-black text-sm pl-1">{totalReferral} Referral</p>
+                             {/* PERBAIKAN: Hitungan referral dinamis & perincian Jaringan Kiri/Kanan */}
+                             <p className="font-black text-sm pl-1">{stats.total} Referral</p>
+                             <div className="text-[9px] text-slate-600 pl-1 mt-1 font-semibold space-y-0.5">
+                                 <p>Jaringan Kiri : {stats.left}</p>
+                                 <p>Jaringan Kanan : {stats.right}</p>
+                             </div>
                         </div>
                         <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-chart-line text-sm"></i></div>
                                  <p className="text-[10px] font-bold leading-tight">Total Komisi<br/>Bulan Ini</p>
                              </div>
-                             <p className="font-black text-sm pl-1">{formatIDR(user?.walletAvailable)}</p>
+                             <p className="font-black text-sm pl-1">{formatIDR(totalKomisiBulanIni)}</p>
                         </div>
                     </div>
                 </div>
@@ -569,6 +611,9 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 e.preventDefault(); setIsSubmitting(true); setRegMsg({ type: '', text: '' });
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
+                    const newUid = "mock_uid_" + Date.now(); 
+                    const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
+                    const billAmount = 150000 + Math.floor(Math.random() * 900) + 100;
                     
                     let finalSponsorLeg = modalPos;
                     if (history.length > 0) {
@@ -576,21 +621,17 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         finalSponsorLeg = firstChild.position;
                     }
 
-                    const newUid = "mock_uid_" + Date.now(); 
-                    const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
-                    const billAmount = 150000 + Math.floor(Math.random() * 900) + 100;
-
                     const downlineData = {
                         userId: newUid,
                         name: regName, email: regEmail, phone: regPhone,
                         sponsor: user.referralCode,
-                        upline: viewRoot.referralCode,
+                        upline: viewRoot.referralCode, 
                         position: modalPos,
-                        sponsorLeg: finalSponsorLeg, 
+                        sponsorLeg: finalSponsorLeg,
                         referralCode: refCode,
                         billAmount: billAmount,
                         walletAvailable: 0, leftDirects: 0, rightDirects: 0,
-                        isQualified: false, qualifiedPairs: 0, bankName: "", bankAccount: "",
+                        isQualified: false, bankName: "", bankAccount: "",
                         status: "PENDING",
                         createdAt: new Date().toISOString()
                     };
@@ -600,7 +641,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         window.sendTelegramNotification(downlineData);
                     }
 
-                    setRegMsg({ type: 'success', text: `Sukses! ${regName} terdaftar.` });
+                    setRegMsg({ type: 'success', text: `Sukses! ${regName} terdaftar di kaki ${modalPos}.` });
                     fetchTree(); 
                     setRegName(''); setRegPhone(''); setRegEmail(''); setRegPass('');
                     setTimeout(() => { setShowModal(false); setRegMsg({type:'', text:''}); }, 2500);
