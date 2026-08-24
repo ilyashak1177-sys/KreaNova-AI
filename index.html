@@ -54,7 +54,6 @@
 
         const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0);
 
-        // --- SISTEM NOTIFIKASI TELEGRAM ---
         window.sendTelegramNotification = (userData) => {
             const botToken = "8891581094:AAEoyvV_4f4OFOL3_cL5pMNAy3q93nd5duo"; 
             const chatId = "8920622995"; 
@@ -86,13 +85,10 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             })
             .then(res => res.json())
             .then(data => {
-                if (!data.ok) {
-                    console.error("Gagal dikirim ke Telegram (Ditolak API):", data.description);
-                }
+                if (!data.ok) console.error("Gagal dikirim ke Telegram:", data.description);
             })
             .catch(e => console.error("Gagal terhubung ke server Telegram:", e));
         };
-        // --- AKHIR SISTEM NOTIFIKASI TELEGRAM ---
 
         const KreaNovaLogo = ({ className = "w-12 h-12" }) => (
             <img 
@@ -257,22 +253,30 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
 
-                    const finalSponsor = (!sponsor || sponsor.trim() === '') ? 'KREANOVA' : sponsor.toUpperCase();
+                    const finalSponsor = (!sponsor || sponsor.trim() === '') ? 'KREANOVA' : sponsor.trim().toUpperCase();
                     
-                    // --- ALGORITMA AUTO-SPILLOVER (Limpahan Bawah) ---
+                    // --- ALGORITMA AUTO-SPILLOVER TINGKAT TINGGI (Limpahan Bawah Absolut) ---
+                    // Menggunakan filter JavaScript untuk menjamin 100% tidak ada kegagalan indeks query
                     let currentUplineCode = finalSponsor;
-                    let assignedPosition = position; // KIRI atau KANAN
+                    let assignedPosition = position; 
 
                     while (true) {
-                        const qSlot = query(collection(db, "users"), where("upline", "==", currentUplineCode), where("position", "==", assignedPosition));
+                        const qSlot = query(collection(db, "users"), where("upline", "==", currentUplineCode));
                         const snapSlot = await getDocs(qSlot);
                         
-                        if (snapSlot.empty) {
-                            // Slot kosong ditemukan! Berhenti mencari.
+                        let childAtPosition = null;
+                        snapSlot.forEach(docSnap => {
+                            if (docSnap.data().position === assignedPosition) {
+                                childAtPosition = docSnap.data();
+                            }
+                        });
+                        
+                        if (!childAtPosition) {
+                            // Slot benar-benar kosong! Berhenti mencari dan tempatkan di sini.
                             break;
                         } else {
-                            // Slot terisi, turun ke kedalaman berikutnya di kaki yang sama
-                            currentUplineCode = snapSlot.docs[0].data().referralCode;
+                            // Slot terisi, turun ke kedalaman berikutnya di kaki yang sama (Limpahan Kaki Luar)
+                            currentUplineCode = childAtPosition.referralCode;
                         }
                     }
                     // ---------------------------------------------------
@@ -287,16 +291,16 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         email: email,
                         phone: phone,
                         sponsor: finalSponsor,
-                        upline: currentUplineCode, // Hasil Spillover
+                        upline: currentUplineCode, // Hasil Spillover Absolut
                         position: assignedPosition,
-                        sponsorLeg: position, // Merekam di kaki mana member ini berada relatif terhadap Sponsor Asli
+                        sponsorLeg: position, 
                         referralCode: refCode,
                         billAmount: billAmount,
                         walletAvailable: 0,
                         leftDirects: 0,
                         rightDirects: 0,
                         isQualified: false,
-                        qualifiedPairs: 0, // Pencatatan siklus qualified
+                        qualifiedPairs: 0, 
                         bankName: "",
                         bankAccount: "",
                         status: "PENDING",
@@ -375,18 +379,11 @@ Silakan cek Panel Admin untuk Aktivasi!`;
         const Dashboard = ({ user }) => {
             const [copied, setCopied] = useState(false);
             
+            // Domain Dikunci Paten (Vercel Asli)
             const fullLink = `https://krea-nova-ai.vercel.app/?ref=${user?.referralCode || ''}`;
             
-            const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!
-            
-Dapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.
-
-✅ Modul AI Lengkap
-✅ Komunitas Solid
-✅ Potensi Income Tanpa Batas
-
-Daftar sekarang melalui link resmi:
-${fullLink}`;
+            // Naskah Copywriting Profesional untuk dibagikan tanpa embel-embel judul URL
+            const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!\n\nDapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.\n\n✅ Modul AI Lengkap\n✅ Komunitas Solid\n✅ Potensi Income Tanpa Batas\n\nDaftar sekarang melalui link resmi:\n${fullLink}`;
 
             const handleCopy = () => {
                 if (navigator.clipboard && window.isSecureContext) {
@@ -414,6 +411,7 @@ ${fullLink}`;
 
             const handleShare = () => {
                 if (navigator.share) {
+                    // Hanya mengirim text murni tanpa title/url agar tidak berantakan di WhatsApp
                     navigator.share({ text: shareText }).catch(console.error);
                 }
             };
@@ -572,7 +570,6 @@ ${fullLink}`;
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
                     
-                    // Lacak Kaki Asli Sponsor (Mencegah salah perhitungan Kiri/Kanan bagi Sponsor Utama)
                     let finalSponsorLeg = modalPos;
                     if (history.length > 0) {
                         const firstChild = history.length > 1 ? history[1] : viewRoot;
@@ -589,7 +586,7 @@ ${fullLink}`;
                         sponsor: user.referralCode,
                         upline: viewRoot.referralCode,
                         position: modalPos,
-                        sponsorLeg: finalSponsorLeg, // PENTING: Merekam posisi absolut terhadap Sponsor
+                        sponsorLeg: finalSponsorLeg, 
                         referralCode: refCode,
                         billAmount: billAmount,
                         walletAvailable: 0, leftDirects: 0, rightDirects: 0,
@@ -920,8 +917,8 @@ ${fullLink}`;
                     )}
                     
                     <nav className="h-16 bg-slate-900/95 border-t border-slate-800 flex justify-around items-center shrink-0 z-20 pb-safe relative shadow-[0_-5px_15px_rgba(0,0,0,0.3)]">
-                        <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center w-16 transition-colors ${activeTab === 'home' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-home text-lg mb-1"></i><span className="text-[9px] font-semibold">Beranda</span></button>
-                        <button onClick={() => setActiveTab('network')} className={`flex flex-col items-center w-16 transition-colors ${activeTab === 'network' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-sitemap text-lg mb-1"></i><span className="text-[9px] font-semibold">Jaringan</span></button>
+                        <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'home' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-home text-lg mb-1"></i><span className="text-[9px] font-semibold">Beranda</span></button>
+                        <button onClick={() => setActiveTab('network')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'network' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-sitemap text-lg mb-1"></i><span className="text-[9px] font-semibold">Jaringan</span></button>
                         
                         <div className="relative -top-6 flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform z-50" onClick={() => setShowBannerPopup(true)}>
                             <div className="w-[56px] h-[56px] bg-gradient-to-b from-[#d4af37] to-yellow-600 rounded-full p-0.5 shadow-[0_5px_15px_rgba(212,175,55,0.4)] flex items-center justify-center">
@@ -929,7 +926,7 @@ ${fullLink}`;
                                     <img 
                                         src="IMG_20260820_224441.jpg" 
                                         alt="KreaNova Logo" 
-                                        className="w-full h-full object-cover"
+                                        className="w-full h-full object-cover relative z-50"
                                         onError={(e) => {
                                             e.target.onerror = null; 
                                             e.target.src = "https://ui-avatars.com/api/?name=KN&background=020617&color=d4af37&bold=true&font-size=0.4";
@@ -939,8 +936,8 @@ ${fullLink}`;
                             </div>
                         </div>
 
-                        <button onClick={() => setActiveTab('ai')} className={`flex flex-col items-center w-16 transition-colors ${activeTab === 'ai' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-robot text-lg mb-1"></i><span className="text-[9px] font-semibold">AI Studio</span></button>
-                        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center w-16 transition-colors ${activeTab === 'profile' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-user-circle text-lg mb-1"></i><span className="text-[9px] font-semibold">Profil</span></button>
+                        <button onClick={() => setActiveTab('ai')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'ai' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-robot text-lg mb-1"></i><span className="text-[9px] font-semibold">AI Studio</span></button>
+                        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'profile' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-user-circle text-lg mb-1"></i><span className="text-[9px] font-semibold">Profil</span></button>
                     </nav>
                 </div>
             );
