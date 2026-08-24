@@ -252,12 +252,31 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 setErrorMsg('');
                 
                 try {
-                    const { auth, db, createUserWithEmailAndPassword, doc, setDoc } = window.KreaNovaBackend;
+                    const { auth, db, createUserWithEmailAndPassword, doc, setDoc, collection, query, where, getDocs } = window.KreaNovaBackend;
                     
                     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
 
                     const finalSponsor = (!sponsor || sponsor.trim() === '') ? 'KREANOVA' : sponsor.toUpperCase();
+                    
+                    // --- ALGORITMA AUTO-SPILLOVER (Limpahan Bawah) ---
+                    let currentUplineCode = finalSponsor;
+                    let assignedPosition = position; // KIRI atau KANAN
+
+                    while (true) {
+                        const qSlot = query(collection(db, "users"), where("upline", "==", currentUplineCode), where("position", "==", assignedPosition));
+                        const snapSlot = await getDocs(qSlot);
+                        
+                        if (snapSlot.empty) {
+                            // Slot kosong ditemukan! Berhenti mencari.
+                            break;
+                        } else {
+                            // Slot terisi, turun ke kedalaman berikutnya di kaki yang sama
+                            currentUplineCode = snapSlot.docs[0].data().referralCode;
+                        }
+                    }
+                    // ---------------------------------------------------
+
                     const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
                     const uniqueCode = Math.floor(Math.random() * 900) + 100;
                     const billAmount = 150000 + uniqueCode;
@@ -268,14 +287,16 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         email: email,
                         phone: phone,
                         sponsor: finalSponsor,
-                        upline: finalSponsor, 
-                        position: position,
+                        upline: currentUplineCode, // Hasil Spillover
+                        position: assignedPosition,
+                        sponsorLeg: position, // Merekam di kaki mana member ini berada relatif terhadap Sponsor Asli
                         referralCode: refCode,
                         billAmount: billAmount,
                         walletAvailable: 0,
                         leftDirects: 0,
                         rightDirects: 0,
                         isQualified: false,
+                        qualifiedPairs: 0, // Pencatatan siklus qualified
                         bankName: "",
                         bankAccount: "",
                         status: "PENDING",
@@ -354,11 +375,10 @@ Silakan cek Panel Admin untuk Aktivasi!`;
         const Dashboard = ({ user }) => {
             const [copied, setCopied] = useState(false);
             
-            // Kunci link permanen ke Vercel agar selalu rapi
             const fullLink = `https://krea-nova-ai.vercel.app/?ref=${user?.referralCode || ''}`;
             
             const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!
-
+            
 Dapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.
 
 ✅ Modul AI Lengkap
@@ -394,10 +414,13 @@ ${fullLink}`;
 
             const handleShare = () => {
                 if (navigator.share) {
-                    // Hanya membagikan text murni tanpa title atau url parameter agar tidak kotor di WhatsApp
                     navigator.share({ text: shareText }).catch(console.error);
                 }
             };
+
+            const totalReferral = (user?.leftDirects || 0) + (user?.rightDirects || 0);
+            const totalBonusSponsor = totalReferral * 40000;
+            const qualifiedPairs = user?.qualifiedPairs || 0;
 
             return (
                 <div className="bg-white -m-4 p-5 min-h-[100dvh] animate-fade-in pb-24 text-slate-900 font-sans">
@@ -460,7 +483,7 @@ ${fullLink}`;
                                  <div className="w-8 h-8 bg-white text-[#297839] rounded-full flex items-center justify-center shadow"><i className="fas fa-dollar-sign font-black text-sm"></i></div>
                                  <p className="text-[10px] font-semibold leading-tight text-green-50">Jumlah Bonus<br/>Sponsor</p>
                              </div>
-                             <p className="font-black text-lg pl-1 drop-shadow-sm">{formatIDR(((user?.leftDirects || 0) + (user?.rightDirects || 0)) * 40000)}</p>
+                             <p className="font-black text-lg pl-1 drop-shadow-sm">{formatIDR(totalBonusSponsor)}</p>
                         </div>
                         <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
@@ -468,13 +491,14 @@ ${fullLink}`;
                                  <p className="text-[10px] font-bold leading-tight">Bonus<br/>Qualified</p>
                              </div>
                              <p className="font-black text-sm pl-1">Level: <span className="text-yellow-600">{user?.isQualified ? 'Gold' : 'Basic'}</span></p>
+                             {qualifiedPairs > 0 && <p className="text-[9px] text-slate-500 pl-1 mt-0.5">{qualifiedPairs} Pasang Siklus</p>}
                         </div>
                         <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-users text-sm"></i></div>
                                  <p className="text-[10px] font-bold leading-tight">Jumlah<br/>Referral</p>
                              </div>
-                             <p className="font-black text-sm pl-1">{(user?.leftDirects || 0) + (user?.rightDirects || 0)} Referral</p>
+                             <p className="font-black text-sm pl-1">{totalReferral} Referral</p>
                         </div>
                         <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
@@ -511,7 +535,6 @@ ${fullLink}`;
                 setLeftNode(null); setRightNode(null);
                 try {
                     const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
-                    // Menarik semua downline (termasuk PENDING) berdasarkan ID upline yang sedang dilihat
                     const q = query(collection(db, "users"), where("upline", "==", viewRoot.referralCode));
                     const snap = await getDocs(q);
                     let lNode = null, rNode = null;
@@ -548,6 +571,14 @@ ${fullLink}`;
                 e.preventDefault(); setIsSubmitting(true); setRegMsg({ type: '', text: '' });
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
+                    
+                    // Lacak Kaki Asli Sponsor (Mencegah salah perhitungan Kiri/Kanan bagi Sponsor Utama)
+                    let finalSponsorLeg = modalPos;
+                    if (history.length > 0) {
+                        const firstChild = history.length > 1 ? history[1] : viewRoot;
+                        finalSponsorLeg = firstChild.position;
+                    }
+
                     const newUid = "mock_uid_" + Date.now(); 
                     const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
                     const billAmount = 150000 + Math.floor(Math.random() * 900) + 100;
@@ -558,10 +589,11 @@ ${fullLink}`;
                         sponsor: user.referralCode,
                         upline: viewRoot.referralCode,
                         position: modalPos,
+                        sponsorLeg: finalSponsorLeg, // PENTING: Merekam posisi absolut terhadap Sponsor
                         referralCode: refCode,
                         billAmount: billAmount,
                         walletAvailable: 0, leftDirects: 0, rightDirects: 0,
-                        isQualified: false, bankName: "", bankAccount: "",
+                        isQualified: false, qualifiedPairs: 0, bankName: "", bankAccount: "",
                         status: "PENDING",
                         createdAt: new Date().toISOString()
                     };
@@ -571,7 +603,7 @@ ${fullLink}`;
                         window.sendTelegramNotification(downlineData);
                     }
 
-                    setRegMsg({ type: 'success', text: `Sukses! ${regName} terdaftar di kaki ${modalPos}.` });
+                    setRegMsg({ type: 'success', text: `Sukses! ${regName} terdaftar.` });
                     fetchTree(); 
                     setRegName(''); setRegPhone(''); setRegEmail(''); setRegPass('');
                     setTimeout(() => { setShowModal(false); setRegMsg({type:'', text:''}); }, 2500);
@@ -892,7 +924,7 @@ ${fullLink}`;
                         <button onClick={() => setActiveTab('network')} className={`flex flex-col items-center w-16 transition-colors ${activeTab === 'network' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-sitemap text-lg mb-1"></i><span className="text-[9px] font-semibold">Jaringan</span></button>
                         
                         <div className="relative -top-6 flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform z-50" onClick={() => setShowBannerPopup(true)}>
-                            <div className="w-[60px] h-[60px] bg-gradient-to-b from-[#d4af37] to-yellow-600 rounded-full p-0.5 shadow-[0_5px_15px_rgba(212,175,55,0.4)] flex items-center justify-center">
+                            <div className="w-[56px] h-[56px] bg-gradient-to-b from-[#d4af37] to-yellow-600 rounded-full p-0.5 shadow-[0_5px_15px_rgba(212,175,55,0.4)] flex items-center justify-center">
                                 <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center overflow-hidden border-[3px] border-slate-900">
                                     <img 
                                         src="IMG_20260820_224441.jpg" 
