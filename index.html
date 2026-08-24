@@ -54,35 +54,41 @@
 
         // --- SISTEM NOTIFIKASI TELEGRAM ---
         window.sendTelegramNotification = (userData) => {
-            // GANTI DUA BARIS INI DENGAN DATA ASLI ANDA
-            const botToken = "8891581094:AAEoyvV_4f4OFOL3_cL5pMNAy3q93nd5duo"; // <-- Paste Token Anda di sini
-            const chatId = "8920622995"; // <-- Paste Angka Chat ID Anda di sini
+            const botToken = "8891581094:AAEoyvV_4f4OFOL3_cL5pMNAy3q93nd5duo"; 
+            const chatId = "8920622995"; 
 
-            // JANGAN UBAH KODE DI BAWAH INI
             if (!botToken || botToken.includes('TOKEN_BOT_TELEGRAM_ANDA')) return;
             
             const message = `
-🔔 *PENDAFTAR KREANOVA BARU!* 🔔
+🔔 <b>PENDAFTAR KREANOVA BARU!</b> 🔔
 ====================
-👤 Nama: ${userData.name}
-📱 No WA: ${userData.phone}
-📧 Email: ${userData.email}
-🤝 Sponsor: ${userData.sponsor}
-📍 Posisi: ${userData.position}
-💰 Tagihan: Rp ${new Intl.NumberFormat('id-ID').format(userData.billAmount)}
+👤 Nama: <b>${userData.name}</b>
+📱 No WA: <b>${userData.phone}</b>
+📧 Email: <b>${userData.email}</b>
+🤝 Sponsor: <b>${userData.sponsor}</b>
+📍 Posisi: <b>${userData.position}</b>
+💰 Tagihan: <b>Rp ${new Intl.NumberFormat('id-ID').format(userData.billAmount)}</b>
 ====================
 Silakan cek Panel Admin untuk Aktivasi!`;
 
             const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            
             fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     chat_id: chatId,
                     text: message,
-                    parse_mode: 'Markdown'
+                    parse_mode: 'HTML'
                 })
-            }).catch(e => console.error("Gagal kirim Telegram:", e));
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.ok) {
+                    console.error("Gagal dikirim ke Telegram (Ditolak API):", data.description);
+                }
+            })
+            .catch(e => console.error("Gagal terhubung ke server Telegram:", e));
         };
         // --- AKHIR SISTEM NOTIFIKASI TELEGRAM ---
 
@@ -346,10 +352,8 @@ Silakan cek Panel Admin untuk Aktivasi!`;
         const Dashboard = ({ user }) => {
             const [copied, setCopied] = useState(false);
             
-            // KODE DIPERBAIKI: Mengunci domain ke Vercel agar link selalu rapi dan pendek
             const fullLink = `https://krea-nova-ai.vercel.app/?ref=${user?.referralCode || ''}`;
             
-            // Teks promosi disatukan langsung dengan link agar tidak ada judul tambahan (Header) dari sistem HP yang mengganggu
             const shareText = `🚀 *Peluang Emas Bersama KreaNova AI!*\n\nHalo, mari manfaatkan teknologi Kecerdasan Buatan (AI) untuk memaksimalkan potensi digital dan finansial Anda.\n\n✅ Modul AI Premium Lengkap\n✅ Bonus Jaringan & Qualified\n✅ Komunitas Terverifikasi\n\nSegera daftar dan amankan posisi Anda melalui tautan resmi pendaftaran di bawah ini:\n${fullLink}`;
 
             const handleCopy = () => {
@@ -379,7 +383,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const handleShare = () => {
                 if (navigator.share) {
                     navigator.share({
-                        // Hanya mengirimkan parameter 'text'. Parameter 'title' dan 'url' dihapus agar teks kepala mengganggu hilang.
                         text: shareText
                     }).catch(console.error);
                 }
@@ -387,7 +390,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
             return (
                 <div className="bg-white -m-4 p-5 min-h-[100dvh] animate-fade-in pb-24 text-slate-900 font-sans">
-                    {/* Welcome Text */}
                     <div className="mb-5 flex justify-between items-start">
                         <div>
                             <p className="text-sm text-slate-600 mb-1">Selamat datang kembali,</p>
@@ -399,13 +401,11 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         </div>
                     </div>
 
-                    {/* Search Bar */}
                     <div className="bg-slate-100 rounded-full py-3 px-5 flex items-center mb-6 border border-slate-200 shadow-inner">
                         <i className="fas fa-search text-slate-400 mr-3 text-lg"></i>
                         <input type="text" placeholder="Search" className="bg-transparent outline-none w-full text-sm text-slate-700 font-medium placeholder-slate-400" />
                     </div>
 
-                    {/* Promo Card */}
                     <div className="border-2 border-[#113f28] rounded-3xl p-5 mb-6 relative bg-white shadow-xl overflow-hidden">
                         <div className="absolute right-[-20px] top-[-10px] opacity-5">
                             <i className="fas fa-robot text-9xl text-[#113f28]"></i>
@@ -430,7 +430,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         </div>
                     </div>
 
-                    {/* Wallet Card */}
                     <div className="bg-[#297839] rounded-3xl p-6 mb-6 text-white shadow-2xl relative overflow-hidden">
                         <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-1/4 translate-y-1/4">
                             <i className="fas fa-wallet text-9xl"></i>
@@ -439,14 +438,12 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         <h3 className="text-4xl font-black relative z-10 text-white drop-shadow-md">{formatIDR(user?.walletAvailable)}</h3>
                     </div>
 
-                    {/* Statistics */}
                     <div className="flex justify-between items-end mb-4 px-1">
                         <h3 className="font-extrabold text-[#113f28] text-xl tracking-tight">Statistik Jaringan Anda</h3>
                         <span className="text-xs font-bold text-slate-500 cursor-pointer hover:text-[#113f28]">View all</span>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
-                        {/* Stat 1 */}
                         <div className="bg-[#297839] p-4 rounded-3xl text-white shadow-lg flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-white text-[#297839] rounded-full flex items-center justify-center shadow"><i className="fas fa-dollar-sign font-black text-sm"></i></div>
@@ -454,7 +451,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                              </div>
                              <p className="font-black text-lg pl-1 drop-shadow-sm">{formatIDR(((user?.leftDirects || 0) + (user?.rightDirects || 0)) * 40000)}</p>
                         </div>
-                        {/* Stat 2 */}
                         <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-medal text-sm"></i></div>
@@ -462,7 +458,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                              </div>
                              <p className="font-black text-sm pl-1">Level: <span className="text-yellow-600">{user?.isQualified ? 'Gold' : 'Basic'}</span></p>
                         </div>
-                        {/* Stat 3 */}
                         <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-users text-sm"></i></div>
@@ -470,7 +465,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                              </div>
                              <p className="font-black text-sm pl-1">{(user?.leftDirects || 0) + (user?.rightDirects || 0)} Referral</p>
                         </div>
-                        {/* Stat 4 */}
                         <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-chart-line text-sm"></i></div>
@@ -538,7 +532,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 e.preventDefault(); setIsSubmitting(true); setRegMsg({ type: '', text: '' });
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
-                    // Mock UID for downline to prevent primary account logout
                     const newUid = "mock_uid_" + Date.now(); 
                     const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
                     const billAmount = 150000 + Math.floor(Math.random() * 900) + 100;
@@ -685,7 +678,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                 name: menu.name,
                                 url: menu.url,
                                 icon: icons[index % icons.length],
-                                colorIdx: index % 7 // Asumsi ada 7 kombinasi warna
+                                colorIdx: index % 7
                             }));
                             setTools(mergedTools);
                         } else {
@@ -773,7 +766,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const [bannerText, setBannerText] = useState('');
             const [tripayUrl, setTripayUrl] = useState('');
 
-            // MENGAMBIL DATA BANNER TEKS DAN TRIPAY DARI FIREBASE SECARA REALTIME
             useEffect(() => {
                 const fetchSettings = async () => {
                     if(!window.KreaNovaBackend) return;
@@ -782,7 +774,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         const docSnap = await getDoc(doc(db, "settings", "global_links"));
                         if (docSnap.exists()) {
                             if (docSnap.data().bannerText !== undefined) setBannerText(docSnap.data().bannerText);
-                            else if (docSnap.data().bannerLink) setBannerText(docSnap.data().bannerLink); // Fallback data lama
                             if (docSnap.data().tripayLink) setTripayUrl(docSnap.data().tripayLink);
                         }
                     } catch (e) { console.error("Gagal memuat pengaturan:", e); }
@@ -791,7 +782,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             }, []);
 
             const renderContent = () => {
-                // Tampilan khusus jika akun masih tertunda (PENDING)
                 if (user?.status === 'PENDING') {
                     return (
                         <div className="animate-fade-in p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mt-4 text-center">
@@ -853,7 +843,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         {renderContent()}
                     </main>
 
-                    {/* POPUP BANNER INFORMASI TEKS */}
                     {showBannerPopup && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-slate-950/90 backdrop-blur-sm animate-fade-in">
                             <div className="relative w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-slide-up max-h-[80vh]">
@@ -881,12 +870,11 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center w-16 transition-colors ${activeTab === 'home' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-home text-lg mb-1"></i><span className="text-[9px] font-semibold">Beranda</span></button>
                         <button onClick={() => setActiveTab('network')} className={`flex flex-col items-center w-16 transition-colors ${activeTab === 'network' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-sitemap text-lg mb-1"></i><span className="text-[9px] font-semibold">Jaringan</span></button>
                         
-                        {/* Area Tombol Tengah (Logo - Berfungsi sbg tombol Popup Banner) */}
                         <div className="relative -top-6 flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform z-50" onClick={() => setShowBannerPopup(true)}>
                             <div className="w-[60px] h-[60px] bg-gradient-to-b from-[#d4af37] to-yellow-600 rounded-full p-0.5 shadow-[0_5px_15px_rgba(212,175,55,0.4)] flex items-center justify-center">
                                 <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center overflow-hidden border-[3px] border-slate-900">
                                     <img 
-                                        src="IMG_20260820_224441.jpg" 
+                                        src="IMG_20260820_224441_2.jpg" 
                                         alt="KreaNova Logo" 
                                         className="w-full h-full object-cover"
                                         onError={(e) => {
