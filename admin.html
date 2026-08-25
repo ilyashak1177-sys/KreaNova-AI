@@ -327,6 +327,11 @@
             const [searchTerm, setSearchTerm] = useState('');
             const [loading, setLoading] = useState(true);
 
+            // STATE UNTUK FITUR EDIT DATA MEMBER
+            const [showEditModal, setShowEditModal] = useState(false);
+            const [editData, setEditData] = useState(null);
+            const [isSavingEdit, setIsSavingEdit] = useState(false);
+
             useEffect(() => {
                 if (!window.KreaNovaBackend) return;
                 const { db, collection, onSnapshot } = window.KreaNovaBackend;
@@ -345,11 +350,9 @@
                 return () => unsub();
             }, []);
 
-            // PERBAIKAN: Fitur Backup / Export Database ke CSV
             const handleExportCSV = () => {
                 let csv = "Nama Lengkap,Email,No WhatsApp,Sponsor,Upline,Posisi,ID Referral,Status,Saldo Tersedia\n";
                 users.forEach(u => {
-                    // Escape data dengan kutip ganda agar koma di dalam teks tidak merusak kolom
                     csv += `"${u.name}","${u.email}","${u.phone}","${u.sponsor || ''}","${u.upline || ''}","${u.position || ''}","${u.referralCode}","${u.status}","${u.walletAvailable || 0}"\n`;
                 });
                 
@@ -361,7 +364,6 @@
                 showToast("Berhasil mendownload Backup CSV (Excel)!", "success");
             };
 
-            // PERBAIKAN: Fitur Backup / Export Database ke HTML
             const handleExportHTML = () => {
                 let html = `
                 <!DOCTYPE html>
@@ -485,6 +487,47 @@
                 } catch (e) { showToast("Gagal menghapus: " + e.message, 'error'); }
             };
 
+            // FUNGSI MEMBUKA MODAL EDIT DAN MEMUAT DATA LAMA
+            const handleOpenEdit = (user) => {
+                setEditData({
+                    id: user.id,
+                    name: user.name || '',
+                    phone: user.phone || '',
+                    email: user.email || '',
+                    sponsor: user.sponsor || '',
+                    upline: user.upline || '',
+                    position: user.position || 'KIRI',
+                    bankName: user.bankName || '',
+                    bankAccount: user.bankAccount || ''
+                });
+                setShowEditModal(true);
+            };
+
+            // FUNGSI MENYIMPAN DATA EDIT KE DATABASE
+            const handleSaveEdit = async (e) => {
+                e.preventDefault();
+                setIsSavingEdit(true);
+                try {
+                    const { db, doc, updateDoc } = window.KreaNovaBackend;
+                    await updateDoc(doc(db, "users", editData.id), {
+                        name: editData.name,
+                        phone: editData.phone,
+                        email: editData.email,
+                        sponsor: editData.sponsor.toUpperCase(),
+                        upline: editData.upline.toUpperCase(),
+                        position: editData.position,
+                        bankName: editData.bankName,
+                        bankAccount: editData.bankAccount
+                    });
+                    showToast(`Data ${editData.name} berhasil diperbarui!`, 'success');
+                    setShowEditModal(false);
+                } catch (err) {
+                    showToast("Gagal menyimpan perubahan: " + err.message, 'error');
+                } finally {
+                    setIsSavingEdit(false);
+                }
+            };
+
             const filteredUsers = users.filter(u => 
                 (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -496,7 +539,7 @@
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                             <h2 className="text-xl md:text-2xl font-bold text-white tracking-wide"><i className="fas fa-users text-blue-500 mr-2"></i> Database Member</h2>
-                            <p className="text-slate-400 text-xs mt-1">Kelola status, aktivasi, dan penghapusan member.</p>
+                            <p className="text-slate-400 text-xs mt-1">Kelola status, aktivasi, dan perbaikan data member.</p>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                             <button onClick={handleExportCSV} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap shadow-md"><i className="fas fa-file-excel mr-2"></i>Backup Excel</button>
@@ -510,7 +553,7 @@
 
                     <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
                         <div className="overflow-x-auto custom-scrollbar">
-                            <table className="w-full text-left border-collapse min-w-[800px]">
+                            <table className="w-full text-left border-collapse min-w-[850px]">
                                 <thead>
                                     <tr className="bg-slate-900/90 text-slate-400 text-[10px] md:text-[11px] font-bold uppercase tracking-wider border-b border-slate-800">
                                         <th className="p-3 md:p-4">Member</th>
@@ -549,6 +592,8 @@
                                                 </td>
                                                 <td className="p-3 md:p-4">
                                                     <div className="flex items-center justify-center gap-1.5 md:gap-2">
+                                                        <button onClick={() => handleOpenEdit(u)} title="Edit Data Member" className="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 px-2.5 py-1.5 rounded-lg font-bold text-[10px] transition flex items-center whitespace-nowrap"><i className="fas fa-edit mr-1 hidden md:inline"></i> Edit</button>
+                                                        
                                                         {u.status === 'PENDING' && (
                                                             <button onClick={() => handleActivate(u)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-lg font-bold text-[10px] shadow transition flex items-center whitespace-nowrap"><i className="fas fa-check mr-1 hidden md:inline"></i> Aktifkan</button>
                                                         )}
@@ -558,7 +603,7 @@
                                                         {u.status === 'BLOCKED' && (
                                                             <button onClick={() => handleRestore(u)} className="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-lg font-bold text-[10px] transition flex items-center whitespace-nowrap"><i className="fas fa-undo mr-1 hidden md:inline"></i> Pulihkan</button>
                                                         )}
-                                                        <button onClick={() => handleDelete(u)} className="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40 px-2.5 py-1.5 rounded-lg font-bold text-[10px] transition"><i className="fas fa-trash"></i></button>
+                                                        <button onClick={() => handleDelete(u)} title="Hapus Permanen" className="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40 px-2.5 py-1.5 rounded-lg font-bold text-[10px] transition"><i className="fas fa-trash"></i></button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -568,6 +613,65 @@
                             </table>
                         </div>
                     </div>
+
+                    {/* MODAL FITUR EDIT DATA MEMBER */}
+                    {showEditModal && editData && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-slate-900 border border-slate-700 rounded-3xl p-5 md:p-6 w-full max-w-lg shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+                                <button type="button" onClick={() => setShowEditModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-400 transition"><i className="fas fa-times text-xl"></i></button>
+                                
+                                <h3 className="text-lg md:text-xl font-bold text-white mb-1"><i className="fas fa-user-edit text-blue-500 mr-2"></i>Edit Data Member</h3>
+                                <p className="text-[11px] md:text-xs text-slate-400 mb-5">Perbarui informasi identitas, bank, atau penempatan jaringan member.</p>
+                                
+                                <form onSubmit={handleSaveEdit} className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Nama Lengkap</label>
+                                            <input type="text" required value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-xs focus:border-blue-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">No WhatsApp</label>
+                                            <input type="tel" required value={editData.phone} onChange={e => setEditData({...editData, phone: e.target.value})} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-xs focus:border-blue-500 outline-none" />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Email Aktif</label>
+                                            <input type="email" required value={editData.email} onChange={e => setEditData({...editData, email: e.target.value})} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-xs focus:border-blue-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">ID Sponsor</label>
+                                            <input type="text" required value={editData.sponsor} onChange={e => setEditData({...editData, sponsor: e.target.value})} className="w-full bg-slate-950 border border-slate-700 text-yellow-500 font-mono rounded-xl px-3 py-2.5 text-xs focus:border-blue-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">ID Upline</label>
+                                            <input type="text" required value={editData.upline} onChange={e => setEditData({...editData, upline: e.target.value})} className="w-full bg-slate-950 border border-slate-700 text-emerald-400 font-mono rounded-xl px-3 py-2.5 text-xs focus:border-blue-500 outline-none" />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Posisi Kaki</label>
+                                            <select value={editData.position} onChange={e => setEditData({...editData, position: e.target.value})} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-xs focus:border-blue-500 outline-none">
+                                                <option value="KIRI">Tim Kiri (Left)</option>
+                                                <option value="KANAN">Tim Kanan (Right)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Nama Bank / E-Wallet</label>
+                                            <input type="text" value={editData.bankName} onChange={e => setEditData({...editData, bankName: e.target.value})} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-xs focus:border-blue-500 outline-none" placeholder="Contoh: BCA / DANA" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">No Rekening</label>
+                                            <input type="text" value={editData.bankAccount} onChange={e => setEditData({...editData, bankAccount: e.target.value})} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-xs focus:border-blue-500 outline-none" placeholder="Nomor Rekening..." />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex gap-3 pt-4">
+                                        <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl border border-slate-700 transition text-xs shadow-md">Batalkan</button>
+                                        <button type="submit" disabled={isSavingEdit} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition text-xs flex justify-center items-center">
+                                            {isSavingEdit ? <i className="fas fa-circle-notch fa-spin"></i> : <><i className="fas fa-save mr-2"></i> Simpan Perubahan</>}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
