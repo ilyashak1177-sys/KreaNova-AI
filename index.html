@@ -26,7 +26,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCWpjChuqzjUe4_foM2gCS4_XoCQE33lHk",
@@ -43,7 +43,7 @@
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
-            window.KreaNovaBackend = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp };
+            window.KreaNovaBackend = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, doc, setDoc, updateDoc, getDoc, collection, query, where, getDocs, serverTimestamp };
         } catch (error) {
             console.error("Firebase Initialization Error:", error);
         }
@@ -85,7 +85,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             })
             .then(res => res.json())
             .then(data => {
-                if (!data.ok) console.error("Gagal dikirim ke Telegram (Ditolak API):", data.description);
+                if (!data.ok) console.error("Gagal dikirim ke Telegram:", data.description);
             })
             .catch(e => console.error("Gagal terhubung ke server Telegram:", e));
         };
@@ -254,16 +254,18 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     const user = userCredential.user;
 
                     const finalSponsor = (!sponsor || sponsor.trim() === '') ? 'KREANOVA' : sponsor.trim().toUpperCase();
-                    
                     let currentUplineCode = finalSponsor;
                     let assignedPosition = position; 
 
+                    // ALGORITMA SPILLOVER TAHAN BANTING: 
+                    // Menarik semua anak dan memfilter secara manual (Bypass limitasi Firebase Index)
                     while (true) {
                         const qSlot = query(collection(db, "users"), where("upline", "==", currentUplineCode));
                         const snapSlot = await getDocs(qSlot);
                         
                         let childAtPosition = null;
                         snapSlot.forEach(docSnap => {
+                            // Filter manual di sisi client memastikan keakuratan posisi (termasuk yang PENDING)
                             if (docSnap.data().position === assignedPosition) {
                                 childAtPosition = docSnap.data();
                             }
@@ -375,7 +377,14 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const [copied, setCopied] = useState(false);
             const [stats, setStats] = useState({ left: 0, right: 0, total: 0, activeSponsor: 0, activePairs: 0 });
             
-            // PERBAIKAN: Hitung real-time dari database untuk statistik
+            // State untuk modal Withdraw
+            const [showWdModal, setShowWdModal] = useState(false);
+            const [wdAmount, setWdAmount] = useState('');
+            const [bankName, setBankName] = useState(user?.bankName || '');
+            const [bankAccount, setBankAccount] = useState(user?.bankAccount || '');
+            const [wdStatus, setWdStatus] = useState({ type: '', text: '' });
+            const [isWdSubmitting, setIsWdSubmitting] = useState(false);
+
             useEffect(() => {
                 let isMounted = true;
                 if (!window.KreaNovaBackend || !user?.referralCode) return;
@@ -383,6 +392,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 const fetchStats = async () => {
                     try {
                         const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
+                        // SINKRONISASI 100% LIVE: Hitung langsung kepala pendaftar di database yang referalnya adalah Anda
                         const q = query(collection(db, "users"), where("sponsor", "==", user.referralCode));
                         const snap = await getDocs(q);
                         
@@ -409,6 +419,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                 right, 
                                 total: left + right,
                                 activeSponsor: activeTotal,
+                                // SIKLUS QUALIFIED BERKALI-LIPAT KELIPATAN 5
                                 activePairs: Math.floor(Math.min(activeLeft, activeRight) / 5)
                             });
                         }
@@ -419,8 +430,11 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 return () => { isMounted = false; };
             }, [user?.referralCode]);
 
-            const fullLink = `https://krea-nova-ai.vercel.app/?ref=${user?.referralCode || ''}`;
+            // PENGUNCIAN LINK PERMANEN: Mencegah link editor berantakan yang panjang
+            const baseDomain = "https://krea-nova-ai.vercel.app/";
+            const fullLink = `${baseDomain}?ref=${user?.referralCode || ''}`;
             
+            // NASKAH COPYWRITING YANG RAPI DAN BERSIH (Tanpa encodeURIComponent)
             const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!\n\nDapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.\n\n✅ Modul AI Lengkap\n✅ Komunitas Solid\n✅ Potensi Income Tanpa Batas\n\nDaftar sekarang melalui link resmi:\n${fullLink}`;
 
             const handleCopy = () => {
@@ -444,13 +458,80 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const showCopied = () => { setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
             const handleShare = () => {
+                // Menghilangkan parameter title dan url agar WhatsApp membaca murni teks shareText secara utuh dan rapi
                 if (navigator.share) {
                     navigator.share({ text: shareText }).catch(console.error);
                 }
             };
 
+            // FUNGSI TARIK DANA (WITHDRAWAL)
+            const handleWithdrawSubmit = async (e) => {
+                e.preventDefault();
+                const amount = parseInt(wdAmount);
+                
+                if (isNaN(amount) || amount < 80000) {
+                    setWdStatus({ type: 'error', text: 'Minimal penarikan adalah Rp 80.000!' });
+                    return;
+                }
+                if (amount > user.walletAvailable) {
+                    setWdStatus({ type: 'error', text: 'Saldo Anda tidak mencukupi!' });
+                    return;
+                }
+                if (!bankName.trim() || !bankAccount.trim()) {
+                    setWdStatus({ type: 'error', text: 'Mohon lengkapi Nama Bank dan Nomor Rekening!' });
+                    return;
+                }
+
+                setIsWdSubmitting(true);
+                setWdStatus({ type: '', text: '' });
+
+                try {
+                    const { db, doc, setDoc, updateDoc } = window.KreaNovaBackend;
+                    
+                    // 1. Buat catatan WD di database Admin
+                    const wdId = "WD" + Date.now();
+                    await setDoc(doc(db, "withdrawals", wdId), {
+                        id: wdId,
+                        userId: user.userId,
+                        referralCode: user.referralCode,
+                        name: user.name,
+                        amount: amount,
+                        bankName: bankName,
+                        bankAccount: bankAccount,
+                        status: 'PENDING',
+                        createdAt: new Date().toISOString()
+                    });
+
+                    // 2. Potong saldo user secara langsung
+                    await updateDoc(doc(db, "users", user.userId), {
+                        walletAvailable: user.walletAvailable - amount,
+                        bankName: bankName, // Simpan histori bank
+                        bankAccount: bankAccount
+                    });
+
+                    setWdStatus({ type: 'success', text: 'Berhasil! Permintaan Tarik Dana telah dikirim ke Admin.' });
+                    
+                    // Update tampilan lokal agar tidak perlu refresh halaman
+                    user.walletAvailable -= amount;
+                    user.bankName = bankName;
+                    user.bankAccount = bankAccount;
+
+                    setTimeout(() => {
+                        setShowWdModal(false);
+                        setWdStatus({ type: '', text: '' });
+                        setWdAmount('');
+                    }, 2500);
+
+                } catch (error) {
+                    setWdStatus({ type: 'error', text: 'Gagal mengajukan penarikan: ' + error.message });
+                } finally {
+                    setIsWdSubmitting(false);
+                }
+            };
+
             const totalBonusSponsor = stats.activeSponsor * 40000;
-            const totalBonusQualified = stats.activePairs * 50000;
+            // PERHITUNGAN BERKALI-LIPAT SETIAP 5 PASANG
+            const totalBonusQualified = stats.activePairs * 50000; 
             const totalKomisiBulanIni = totalBonusSponsor + totalBonusQualified;
 
             return (
@@ -495,12 +576,19 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         </div>
                     </div>
 
-                    <div className="bg-[#297839] rounded-3xl p-6 mb-6 text-white shadow-2xl relative overflow-hidden">
+                    {/* BLOK SALDO DAN TOMBOL TARIK DANA */}
+                    <div className="bg-[#297839] rounded-3xl p-6 mb-6 text-white shadow-2xl relative overflow-hidden flex justify-between items-center">
+                        <div>
+                            <p className="text-xs uppercase font-bold text-green-100 tracking-wider mb-2 relative z-10">Saldo Tersedia</p>
+                            <h3 className="text-4xl font-black relative z-10 text-white drop-shadow-md">{formatIDR(user?.walletAvailable)}</h3>
+                        </div>
+                        <button onClick={() => setShowWdModal(true)} className="relative z-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/40 px-4 py-3 rounded-2xl flex flex-col items-center justify-center transition-all shadow-lg active:scale-95">
+                            <i className="fas fa-hand-holding-dollar text-2xl mb-1"></i>
+                            <span className="text-[10px] font-bold uppercase tracking-wider mt-1">Tarik Dana</span>
+                        </button>
                         <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-1/4 translate-y-1/4">
                             <i className="fas fa-wallet text-9xl"></i>
                         </div>
-                        <p className="text-xs uppercase font-bold text-green-100 tracking-wider mb-2 relative z-10">Saldo Tersedia</p>
-                        <h3 className="text-4xl font-black relative z-10 text-white drop-shadow-md">{formatIDR(user?.walletAvailable)}</h3>
                     </div>
 
                     <div className="flex justify-between items-end mb-4 px-1">
@@ -521,9 +609,9 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-medal text-sm"></i></div>
                                  <p className="text-[10px] font-bold leading-tight">Bonus<br/>Qualified</p>
                              </div>
-                             {/* PERBAIKAN: Hilangkan Level Basic, diganti dengan Rupiah 0 dan uraian pencapaian Kiri/Kanan */}
-                             <p className="font-black text-sm pl-1">{formatIDR(totalBonusQualified)}</p>
-                             <div className="text-[9px] text-slate-600 pl-1 mt-1 font-semibold space-y-0.5">
+                             {/* FORMAT BARU BONUS QUALIFIED */}
+                             <p className="font-black text-sm pl-1 mb-1">{totalBonusQualified > 0 ? formatIDR(totalBonusQualified) : 'Rp 0'}</p>
+                             <div className="text-[9px] text-slate-600 pl-1 mt-0.5 font-semibold space-y-0.5">
                                  <p>Posisi Kiri : {stats.left}</p>
                                  <p>Posisi Kanan : {stats.right}</p>
                              </div>
@@ -533,9 +621,9 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-users text-sm"></i></div>
                                  <p className="text-[10px] font-bold leading-tight">Jumlah<br/>Referral</p>
                              </div>
-                             {/* PERBAIKAN: Hitungan referral dinamis & perincian Jaringan Kiri/Kanan */}
-                             <p className="font-black text-sm pl-1">{stats.total} Referral</p>
-                             <div className="text-[9px] text-slate-600 pl-1 mt-1 font-semibold space-y-0.5">
+                             {/* FORMAT BARU JUMLAH REFERRAL */}
+                             <p className="font-black text-sm pl-1 mb-1">{stats.total} Referral</p>
+                             <div className="text-[9px] text-slate-600 pl-1 mt-0.5 font-semibold space-y-0.5">
                                  <p>Jaringan Kiri : {stats.left}</p>
                                  <p>Jaringan Kanan : {stats.right}</p>
                              </div>
@@ -548,6 +636,45 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                              <p className="font-black text-sm pl-1">{formatIDR(totalKomisiBulanIni)}</p>
                         </div>
                     </div>
+
+                    {/* MODAL TARIK DANA */}
+                    {showWdModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md shadow-2xl relative">
+                                <div className="absolute top-0 right-0 p-4">
+                                    <button onClick={() => setShowWdModal(false)} className="text-slate-400 hover:text-red-400 transition"><i className="fas fa-times text-xl"></i></button>
+                                </div>
+                                <h3 className="text-xl font-bold text-white mb-1"><i className="fas fa-hand-holding-dollar text-emerald-500 mr-2"></i>Tarik Dana</h3>
+                                <p className="text-xs text-slate-400 mb-4">Minimal penarikan adalah <strong className="text-emerald-400">Rp 80.000</strong>.</p>
+                                
+                                {wdStatus.text && (
+                                    <div className={`p-3 rounded-xl mb-4 text-xs text-center border font-bold ${wdStatus.type === 'success' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-red-500/10 text-red-500 border-red-500/30'}`}>
+                                        {wdStatus.type === 'success' ? <i className="fas fa-check-circle mr-1"></i> : <i className="fas fa-exclamation-circle mr-1"></i>}
+                                        {wdStatus.text}
+                                    </div>
+                                )}
+                                
+                                <form onSubmit={handleWithdrawSubmit} className="space-y-4">
+                                    <div>
+                                        <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Nominal Penarikan (Rp)</label>
+                                        <input type="number" required value={wdAmount} onChange={(e) => setWdAmount(e.target.value)} min="80000" max={user?.walletAvailable || 0} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-sm focus:border-emerald-500 outline-none transition" placeholder="Contoh: 100000" />
+                                        <p className="text-[9px] text-slate-500 mt-1">Saldo tersedia: {formatIDR(user?.walletAvailable)}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Nama Bank / E-Wallet</label>
+                                        <input type="text" required value={bankName} onChange={(e) => setBankName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-sm focus:border-emerald-500 outline-none transition" placeholder="Contoh: BCA / DANA / OVO" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Nomor Rekening / HP Tujuan</label>
+                                        <input type="text" required value={bankAccount} onChange={(e) => setBankAccount(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl p-3 text-sm focus:border-emerald-500 outline-none transition" placeholder="Masukkan nomor rekening/hp..." />
+                                    </div>
+                                    <button type="submit" disabled={isWdSubmitting || user?.walletAvailable < 80000} className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition-all">
+                                        {isWdSubmitting ? <i className="fas fa-circle-notch fa-spin text-lg"></i> : "Ajukan Penarikan Sekarang"}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
@@ -614,20 +741,13 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     const newUid = "mock_uid_" + Date.now(); 
                     const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
                     const billAmount = 150000 + Math.floor(Math.random() * 900) + 100;
-                    
-                    let finalSponsorLeg = modalPos;
-                    if (history.length > 0) {
-                        const firstChild = history.length > 1 ? history[1] : viewRoot;
-                        finalSponsorLeg = firstChild.position;
-                    }
 
                     const downlineData = {
                         userId: newUid,
                         name: regName, email: regEmail, phone: regPhone,
                         sponsor: user.referralCode,
-                        upline: viewRoot.referralCode, 
+                        upline: viewRoot.referralCode,
                         position: modalPos,
-                        sponsorLeg: finalSponsorLeg,
                         referralCode: refCode,
                         billAmount: billAmount,
                         walletAvailable: 0, leftDirects: 0, rightDirects: 0,
@@ -909,6 +1029,9 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                 <div className="pt-2 first:pt-0"><p className="text-[10px] text-slate-500 uppercase font-bold">Email</p><p className="text-white text-sm">{user?.email}</p></div>
                                 <div className="pt-3"><p className="text-[10px] text-slate-500 uppercase font-bold">Nomor WA</p><p className="text-white text-sm">{user?.phone}</p></div>
                                 <div className="pt-3"><p className="text-[10px] text-slate-500 uppercase font-bold">Sponsor</p><p className="text-emerald-400 text-sm font-mono">{user?.sponsor}</p></div>
+                                {user?.bankName && (
+                                    <div className="pt-3"><p className="text-[10px] text-slate-500 uppercase font-bold">Rekening / E-Wallet</p><p className="text-blue-400 text-sm">{user?.bankName} - {user?.bankAccount}</p></div>
+                                )}
                             </div>
                             <button onClick={onLogout} className="w-full bg-red-950/40 text-red-400 border border-red-900/50 font-bold py-3 rounded-xl text-xs hover:bg-red-900/50 hover:text-white transition-colors shadow-sm">Keluar Akun</button>
                         </div>
@@ -965,7 +1088,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                             <div className="w-[56px] h-[56px] bg-gradient-to-b from-[#d4af37] to-yellow-600 rounded-full p-0.5 shadow-[0_5px_15px_rgba(212,175,55,0.4)] flex items-center justify-center">
                                 <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center overflow-hidden border-[3px] border-slate-900">
                                     <img 
-                                        src="IMG_20260820_224441.jpg" 
+                                        src="IMG_20260820_224441_2.jpg" 
                                         alt="KreaNova Logo" 
                                         className="w-full h-full object-cover relative z-50"
                                         onError={(e) => {
