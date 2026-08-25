@@ -26,7 +26,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        /* PERBAIKAN: Menambahkan onSnapshot agar riwayat WD bisa real-time */
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCWpjChuqzjUe4_foM2gCS4_XoCQE33lHk",
@@ -43,7 +44,7 @@
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
-            window.KreaNovaBackend = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, doc, setDoc, updateDoc, getDoc, collection, query, where, getDocs, serverTimestamp };
+            window.KreaNovaBackend = { auth, db, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, doc, setDoc, updateDoc, getDoc, collection, query, where, getDocs, serverTimestamp, onSnapshot };
         } catch (error) {
             console.error("Firebase Initialization Error:", error);
         }
@@ -54,6 +55,7 @@
 
         const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0);
 
+        // --- SISTEM NOTIFIKASI TELEGRAM ---
         window.sendTelegramNotification = (userData) => {
             const botToken = "8891581094:AAEoyvV_4f4OFOL3_cL5pMNAy3q93nd5duo"; 
             const chatId = "8920622995"; 
@@ -85,10 +87,13 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             })
             .then(res => res.json())
             .then(data => {
-                if (!data.ok) console.error("Gagal dikirim ke Telegram:", data.description);
+                if (!data.ok) {
+                    console.error("Gagal dikirim ke Telegram (Ditolak API):", data.description);
+                }
             })
             .catch(e => console.error("Gagal terhubung ke server Telegram:", e));
         };
+        // --- AKHIR SISTEM NOTIFIKASI TELEGRAM ---
 
         const KreaNovaLogo = ({ className = "w-12 h-12" }) => (
             <img 
@@ -257,24 +262,22 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     let currentUplineCode = finalSponsor;
                     let assignedPosition = position; 
 
-                    // ALGORITMA SPILLOVER TAHAN BANTING: 
-                    // Menarik semua anak dan memfilter secara manual (Bypass limitasi Firebase Index)
+                    // ALGORITMA SPILLOVER (LIMPAHAN) CERDAS: Menarik & memfilter data di client agar terhindar dari Error Index Server
                     while (true) {
                         const qSlot = query(collection(db, "users"), where("upline", "==", currentUplineCode));
                         const snapSlot = await getDocs(qSlot);
                         
                         let childAtPosition = null;
                         snapSlot.forEach(docSnap => {
-                            // Filter manual di sisi client memastikan keakuratan posisi (termasuk yang PENDING)
                             if (docSnap.data().position === assignedPosition) {
                                 childAtPosition = docSnap.data();
                             }
                         });
                         
                         if (!childAtPosition) {
-                            break;
+                            break; // Slot Kosong ditemukan!
                         } else {
-                            currentUplineCode = childAtPosition.referralCode;
+                            currentUplineCode = childAtPosition.referralCode; // Turun ke level berikutnya
                         }
                     }
 
@@ -377,22 +380,32 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const [copied, setCopied] = useState(false);
             const [stats, setStats] = useState({ left: 0, right: 0, total: 0, activeSponsor: 0, activePairs: 0 });
             
-            // State untuk modal Withdraw
+            // State WD Modal
             const [showWdModal, setShowWdModal] = useState(false);
             const [wdAmount, setWdAmount] = useState('');
             const [bankName, setBankName] = useState(user?.bankName || '');
             const [bankAccount, setBankAccount] = useState(user?.bankAccount || '');
             const [wdStatus, setWdStatus] = useState({ type: '', text: '' });
             const [isWdSubmitting, setIsWdSubmitting] = useState(false);
+            
+            // State Riwayat WD
+            const [wdHistory, setWdHistory] = useState([]);
+
+            // PENGUNCIAN LINK PERMANEN
+            const baseDomain = "https://krea-nova-ai.vercel.app/";
+            const fullLink = `${baseDomain}?ref=${user?.referralCode || ''}`;
+            
+            // NASKAH COPYWRITING RAPI UNTUK DIBAGIKAN
+            const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!\n\nDapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.\n\n✅ Modul AI Lengkap\n✅ Komunitas Solid\n✅ Potensi Income Tanpa Batas\n\nDaftar sekarang melalui link resmi:\n${fullLink}`;
 
             useEffect(() => {
                 let isMounted = true;
                 if (!window.KreaNovaBackend || !user?.referralCode) return;
                 
+                // MENGHITUNG STATISTIK REFERRAL SECARA LANGSUNG
                 const fetchStats = async () => {
                     try {
                         const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
-                        // SINKRONISASI 100% LIVE: Hitung langsung kepala pendaftar di database yang referalnya adalah Anda
                         const q = query(collection(db, "users"), where("sponsor", "==", user.referralCode));
                         const snap = await getDocs(q);
                         
@@ -415,12 +428,9 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         
                         if(isMounted) {
                             setStats({ 
-                                left, 
-                                right, 
-                                total: left + right,
+                                left, right, total: left + right,
                                 activeSponsor: activeTotal,
-                                // SIKLUS QUALIFIED BERKALI-LIPAT KELIPATAN 5
-                                activePairs: Math.floor(Math.min(activeLeft, activeRight) / 5)
+                                activePairs: Math.floor(Math.min(activeLeft, activeRight) / 5) // Siklus kelipatan 5
                             });
                         }
                     } catch(e) { console.error("Error fetching live stats:", e); }
@@ -430,12 +440,23 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 return () => { isMounted = false; };
             }, [user?.referralCode]);
 
-            // PENGUNCIAN LINK PERMANEN: Mencegah link editor berantakan yang panjang
-            const baseDomain = "https://krea-nova-ai.vercel.app/";
-            const fullLink = `${baseDomain}?ref=${user?.referralCode || ''}`;
-            
-            // NASKAH COPYWRITING YANG RAPI DAN BERSIH (Tanpa encodeURIComponent)
-            const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!\n\nDapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.\n\n✅ Modul AI Lengkap\n✅ Komunitas Solid\n✅ Potensi Income Tanpa Batas\n\nDaftar sekarang melalui link resmi:\n${fullLink}`;
+            // MEMANTAU RIWAYAT PENARIKAN (REAL-TIME)
+            useEffect(() => {
+                if (!window.KreaNovaBackend || !user?.userId) return;
+                const { db, collection, query, where, onSnapshot } = window.KreaNovaBackend;
+                
+                if (onSnapshot) {
+                    const qWd = query(collection(db, "withdrawals"), where("userId", "==", user.userId));
+                    const unsub = onSnapshot(qWd, (snap) => {
+                        const list = [];
+                        snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+                        // Urutkan dari yang terbaru
+                        list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                        setWdHistory(list);
+                    });
+                    return () => unsub();
+                }
+            }, [user?.userId]);
 
             const handleCopy = () => {
                 if (navigator.clipboard && window.isSecureContext) {
@@ -458,13 +479,11 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const showCopied = () => { setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
             const handleShare = () => {
-                // Menghilangkan parameter title dan url agar WhatsApp membaca murni teks shareText secara utuh dan rapi
                 if (navigator.share) {
                     navigator.share({ text: shareText }).catch(console.error);
                 }
             };
 
-            // FUNGSI TARIK DANA (WITHDRAWAL)
             const handleWithdrawSubmit = async (e) => {
                 e.preventDefault();
                 const amount = parseInt(wdAmount);
@@ -488,7 +507,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 try {
                     const { db, doc, setDoc, updateDoc } = window.KreaNovaBackend;
                     
-                    // 1. Buat catatan WD di database Admin
                     const wdId = "WD" + Date.now();
                     await setDoc(doc(db, "withdrawals", wdId), {
                         id: wdId,
@@ -502,16 +520,14 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         createdAt: new Date().toISOString()
                     });
 
-                    // 2. Potong saldo user secara langsung
                     await updateDoc(doc(db, "users", user.userId), {
                         walletAvailable: user.walletAvailable - amount,
-                        bankName: bankName, // Simpan histori bank
+                        bankName: bankName,
                         bankAccount: bankAccount
                     });
 
                     setWdStatus({ type: 'success', text: 'Berhasil! Permintaan Tarik Dana telah dikirim ke Admin.' });
                     
-                    // Update tampilan lokal agar tidak perlu refresh halaman
                     user.walletAvailable -= amount;
                     user.bankName = bankName;
                     user.bankAccount = bankAccount;
@@ -530,12 +546,11 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             };
 
             const totalBonusSponsor = stats.activeSponsor * 40000;
-            // PERHITUNGAN BERKALI-LIPAT SETIAP 5 PASANG
             const totalBonusQualified = stats.activePairs * 50000; 
             const totalKomisiBulanIni = totalBonusSponsor + totalBonusQualified;
 
             return (
-                <div className="bg-white -m-4 p-5 min-h-[100dvh] animate-fade-in pb-24 text-slate-900 font-sans">
+                <div className="bg-[#f8fafc] -m-4 p-5 min-h-[100dvh] animate-fade-in pb-24 text-slate-900 font-sans">
                     <div className="mb-5 flex justify-between items-start">
                         <div>
                             <p className="text-sm text-slate-600 mb-1">Selamat datang kembali,</p>
@@ -547,9 +562,9 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         </div>
                     </div>
 
-                    <div className="bg-slate-100 rounded-full py-3 px-5 flex items-center mb-6 border border-slate-200 shadow-inner">
+                    <div className="bg-white rounded-full py-3 px-5 flex items-center mb-6 border border-slate-200 shadow-sm">
                         <i className="fas fa-search text-slate-400 mr-3 text-lg"></i>
-                        <input type="text" placeholder="Search" className="bg-transparent outline-none w-full text-sm text-slate-700 font-medium placeholder-slate-400" />
+                        <input type="text" placeholder="Search tools..." className="bg-transparent outline-none w-full text-sm text-slate-700 font-medium placeholder-slate-400" />
                     </div>
 
                     <div className="border-2 border-[#113f28] rounded-3xl p-5 mb-6 relative bg-white shadow-xl overflow-hidden">
@@ -562,7 +577,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                             <p className="text-xs text-slate-600 font-medium mb-5 pr-2">Optimalkan jaringan Anda.</p>
                         </div>
                         
-                        <div className="bg-slate-200 p-3 rounded-xl text-center text-[10px] sm:text-xs text-slate-800 font-mono mb-4 truncate border border-slate-300 relative z-10 shadow-inner">
+                        <div className="bg-slate-100 p-3 rounded-xl text-center text-[10px] sm:text-xs text-slate-800 font-mono mb-4 truncate border border-slate-300 relative z-10 shadow-inner">
                             {fullLink}
                         </div>
                         
@@ -576,7 +591,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         </div>
                     </div>
 
-                    {/* BLOK SALDO DAN TOMBOL TARIK DANA */}
                     <div className="bg-[#297839] rounded-3xl p-6 mb-6 text-white shadow-2xl relative overflow-hidden flex justify-between items-center">
                         <div>
                             <p className="text-xs uppercase font-bold text-green-100 tracking-wider mb-2 relative z-10">Saldo Tersedia</p>
@@ -604,37 +618,72 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                              </div>
                              <p className="font-black text-lg pl-1 drop-shadow-sm">{formatIDR(totalBonusSponsor)}</p>
                         </div>
-                        <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
-                             <div className="flex items-center gap-3 mb-3">
-                                 <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-medal text-sm"></i></div>
-                                 <p className="text-[10px] font-bold leading-tight">Bonus<br/>Qualified</p>
-                             </div>
-                             {/* FORMAT BARU BONUS QUALIFIED */}
-                             <p className="font-black text-sm pl-1 mb-1">{totalBonusQualified > 0 ? formatIDR(totalBonusQualified) : 'Rp 0'}</p>
-                             <div className="text-[9px] text-slate-600 pl-1 mt-0.5 font-semibold space-y-0.5">
-                                 <p>Posisi Kiri : {stats.left}</p>
-                                 <p>Posisi Kanan : {stats.right}</p>
-                             </div>
-                        </div>
-                        <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
+                        
+                        <div className="bg-white p-4 rounded-3xl text-[#113f28] shadow-sm border border-slate-200 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-users text-sm"></i></div>
                                  <p className="text-[10px] font-bold leading-tight">Jumlah<br/>Referral</p>
                              </div>
-                             {/* FORMAT BARU JUMLAH REFERRAL */}
                              <p className="font-black text-sm pl-1 mb-1">{stats.total} Referral</p>
-                             <div className="text-[9px] text-slate-600 pl-1 mt-0.5 font-semibold space-y-0.5">
+                             <div className="text-[9px] text-slate-600 pl-1 mt-0.5 font-semibold space-y-0.5 border-t border-slate-100 pt-1">
                                  <p>Jaringan Kiri : {stats.left}</p>
                                  <p>Jaringan Kanan : {stats.right}</p>
                              </div>
                         </div>
-                        <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow border border-green-200/50 flex flex-col justify-center">
+
+                        <div className="bg-white p-4 rounded-3xl text-[#113f28] shadow-sm border border-slate-200 flex flex-col justify-center">
+                             <div className="flex items-center gap-3 mb-3">
+                                 <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-medal text-sm"></i></div>
+                                 <p className="text-[10px] font-bold leading-tight">Bonus<br/>Qualified</p>
+                             </div>
+                             <p className="font-black text-sm pl-1 mb-1">{totalBonusQualified > 0 ? formatIDR(totalBonusQualified) : 'Rp 0'}</p>
+                             <div className="text-[9px] text-slate-600 pl-1 mt-0.5 font-semibold space-y-0.5 border-t border-slate-100 pt-1">
+                                 <p>Posisi Kiri : {stats.left}</p>
+                                 <p>Posisi Kanan : {stats.right}</p>
+                             </div>
+                        </div>
+
+                        <div className="bg-[#e6f0e9] p-4 rounded-3xl text-[#113f28] shadow-sm border border-green-200/50 flex flex-col justify-center">
                              <div className="flex items-center gap-3 mb-3">
                                  <div className="w-8 h-8 bg-[#113f28] text-white rounded-full flex items-center justify-center shadow"><i className="fas fa-chart-line text-sm"></i></div>
                                  <p className="text-[10px] font-bold leading-tight">Total Komisi<br/>Bulan Ini</p>
                              </div>
                              <p className="font-black text-sm pl-1">{formatIDR(totalKomisiBulanIni)}</p>
                         </div>
+                    </div>
+
+                    {/* SEGMEN RIWAYAT PENARIKAN (WD) */}
+                    <div className="mt-8 mb-4 px-1 flex justify-between items-end">
+                        <h3 className="font-extrabold text-[#113f28] text-xl tracking-tight">Riwayat Penarikan</h3>
+                    </div>
+                    
+                    <div className="space-y-3">
+                        {wdHistory.length === 0 ? (
+                            <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm text-center">
+                                <i className="fas fa-receipt text-3xl text-slate-300 mb-2"></i>
+                                <p className="text-xs font-semibold text-slate-500">Belum ada riwayat penarikan dana.</p>
+                            </div>
+                        ) : (
+                            wdHistory.map((wd) => (
+                                <div key={wd.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${wd.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-600' : wd.status === 'REJECTED' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                                            <i className={`fas ${wd.status === 'COMPLETED' ? 'fa-check' : wd.status === 'REJECTED' ? 'fa-times' : 'fa-clock'}`}></i>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-800">{formatIDR(wd.amount)}</p>
+                                            <p className="text-[10px] text-slate-500 font-medium">{wd.bankName} - {wd.bankAccount}</p>
+                                            <p className="text-[9px] text-slate-400 mt-0.5">{new Date(wd.createdAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit'})}</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        {wd.status === 'COMPLETED' && <span className="bg-emerald-100 text-emerald-600 px-2.5 py-1 rounded-md text-[9px] font-bold tracking-wide">SUKSES</span>}
+                                        {wd.status === 'PENDING' && <span className="bg-amber-100 text-amber-600 px-2.5 py-1 rounded-md text-[9px] font-bold tracking-wide">PROSES</span>}
+                                        {wd.status === 'REJECTED' && <span className="bg-red-100 text-red-600 px-2.5 py-1 rounded-md text-[9px] font-bold tracking-wide">DITOLAK</span>}
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
 
                     {/* MODAL TARIK DANA */}
@@ -738,7 +787,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 e.preventDefault(); setIsSubmitting(true); setRegMsg({ type: '', text: '' });
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
-                    const newUid = "mock_uid_" + Date.now(); 
+                    const newUid = "uid_" + Date.now(); 
                     const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
                     const billAmount = 150000 + Math.floor(Math.random() * 900) + 100;
 
@@ -807,8 +856,8 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
             return (
                 <div className="animate-fade-in pb-10">
-                    <h2 className="text-xl font-bold text-white mb-6"><i className="fas fa-sitemap text-yellow-500 mr-2"></i> Pohon Jaringan</h2>
-                    <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-lg mb-6 flex flex-col items-center relative overflow-hidden">
+                    <h2 className="text-xl font-bold text-slate-800 mb-6"><i className="fas fa-sitemap text-[#113f28] mr-2"></i> Pohon Jaringan</h2>
+                    <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-xl mb-6 flex flex-col items-center relative overflow-hidden">
                         {history.length > 0 && (
                             <button onClick={handleGoUp} className="absolute top-4 left-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 p-2 rounded-lg text-xs font-bold transition flex items-center z-20 shadow-md"><i className="fas fa-arrow-up mr-2"></i> Naik</button>
                         )}
@@ -917,7 +966,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             ];
 
             return (
-                <div className="bg-white -m-4 p-5 min-h-[100dvh] animate-fade-in pb-24 text-slate-900 font-sans">
+                <div className="bg-[#f8fafc] -m-4 p-5 min-h-[100dvh] animate-fade-in pb-24 text-slate-900 font-sans">
                     <div className="mb-6 flex justify-between items-start">
                         <div>
                             <h2 className="text-3xl font-extrabold text-[#113f28] tracking-tight">AI Studio</h2>
@@ -995,20 +1044,20 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const renderContent = () => {
                 if (user?.status === 'PENDING') {
                     return (
-                        <div className="animate-fade-in p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mt-4 text-center">
+                        <div className="animate-fade-in p-6 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl mt-4 text-center">
                             <div className="w-20 h-20 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-orange-500/50">
                                 <i className="fas fa-clock text-3xl text-orange-400"></i>
                             </div>
                             <h2 className="text-xl font-bold text-white mb-2">Akun Menunggu Aktivasi</h2>
                             <p className="text-sm text-slate-400 mb-6">Selesaikan pembayaran untuk mengaktifkan akun dan mulai menghasilkan.</p>
-                            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6">
+                            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6 shadow-inner">
                                 <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Total Tagihan</p>
                                 <p className="text-2xl font-black text-white">{formatIDR(user?.billAmount)}</p>
                             </div>
-                            <a href={tripayUrl || "https://tripay.co.id/checkout"} target="_blank" rel="noopener noreferrer" className="block w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 text-white font-bold py-3.5 rounded-xl text-sm shadow-lg mb-4 text-center">
+                            <a href={tripayUrl || "https://tripay.co.id/checkout"} target="_blank" rel="noopener noreferrer" className="block w-full bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 text-white font-bold py-3.5 rounded-xl text-sm shadow-lg mb-4 text-center transition-all">
                                 <i className="fas fa-credit-card mr-2"></i> Bayar Sekarang via Tripay
                             </a>
-                            <button onClick={onLogout} className="w-full bg-slate-900 text-slate-400 hover:text-white border border-slate-800 font-bold py-3 rounded-xl text-xs transition-colors">Keluar Akun</button>
+                            <button onClick={onLogout} className="w-full bg-slate-800 text-slate-400 hover:text-white border border-slate-700 font-bold py-3 rounded-xl text-xs transition-colors">Keluar Akun</button>
                         </div>
                     );
                 }
@@ -1018,22 +1067,22 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     case 'ai': return <AiStudio />;
                     case 'profile': return (
                         <div className="animate-fade-in pb-10">
-                            <div className="flex items-center gap-4 mb-8 bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-md">
-                                <KreaNovaLogo className="w-14 h-14" />
+                            <div className="flex items-center gap-4 mb-6 bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                                <KreaNovaLogo className="w-16 h-16 shadow-md" />
                                 <div>
-                                    <h2 className="text-lg font-bold text-white capitalize">{user?.name}</h2>
-                                    <span className="bg-emerald-500/20 text-emerald-400 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-emerald-500/30">AKUN AKTIF</span>
+                                    <h2 className="text-xl font-black text-[#113f28] capitalize">{user?.name}</h2>
+                                    <span className="bg-emerald-100 text-emerald-600 px-2.5 py-1 rounded-md text-[9px] font-bold mt-1 inline-block">AKUN AKTIF</span>
                                 </div>
                             </div>
-                            <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800 space-y-4 mb-8 divide-y divide-slate-800/50 shadow-md">
-                                <div className="pt-2 first:pt-0"><p className="text-[10px] text-slate-500 uppercase font-bold">Email</p><p className="text-white text-sm">{user?.email}</p></div>
-                                <div className="pt-3"><p className="text-[10px] text-slate-500 uppercase font-bold">Nomor WA</p><p className="text-white text-sm">{user?.phone}</p></div>
-                                <div className="pt-3"><p className="text-[10px] text-slate-500 uppercase font-bold">Sponsor</p><p className="text-emerald-400 text-sm font-mono">{user?.sponsor}</p></div>
+                            <div className="bg-white rounded-3xl p-5 border border-slate-100 space-y-4 mb-8 divide-y divide-slate-100 shadow-sm">
+                                <div className="pt-2 first:pt-0"><p className="text-[10px] text-slate-400 uppercase font-bold">Email</p><p className="text-slate-800 font-semibold text-sm">{user?.email}</p></div>
+                                <div className="pt-3"><p className="text-[10px] text-slate-400 uppercase font-bold">Nomor WA</p><p className="text-slate-800 font-semibold text-sm">{user?.phone}</p></div>
+                                <div className="pt-3"><p className="text-[10px] text-slate-400 uppercase font-bold">Sponsor Anda</p><p className="text-[#297839] text-sm font-black font-mono">{user?.sponsor}</p></div>
                                 {user?.bankName && (
-                                    <div className="pt-3"><p className="text-[10px] text-slate-500 uppercase font-bold">Rekening / E-Wallet</p><p className="text-blue-400 text-sm">{user?.bankName} - {user?.bankAccount}</p></div>
+                                    <div className="pt-3"><p className="text-[10px] text-slate-400 uppercase font-bold">Rekening / E-Wallet</p><p className="text-blue-600 font-bold text-sm">{user?.bankName} - {user?.bankAccount}</p></div>
                                 )}
                             </div>
-                            <button onClick={onLogout} className="w-full bg-red-950/40 text-red-400 border border-red-900/50 font-bold py-3 rounded-xl text-xs hover:bg-red-900/50 hover:text-white transition-colors shadow-sm">Keluar Akun</button>
+                            <button onClick={onLogout} className="w-full bg-red-50 text-red-500 border border-red-200 font-bold py-4 rounded-2xl text-sm hover:bg-red-500 hover:text-white transition-all shadow-sm">Keluar Akun</button>
                         </div>
                     );
                     default: return <Dashboard user={user} />;
@@ -1042,37 +1091,37 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
             return (
                 <div 
-                    className="w-full max-w-md mx-auto bg-slate-950 flex flex-col relative overflow-hidden font-sans shadow-[0_0_40px_rgba(0,0,0,0.5)] border-x border-slate-800/50" 
+                    className="w-full max-w-md mx-auto bg-[#f8fafc] flex flex-col relative overflow-hidden font-sans shadow-[0_0_40px_rgba(0,0,0,0.1)] border-x border-slate-200" 
                     style={{ height: '100dvh' }}
                 >
-                    <header className="h-16 bg-slate-900/95 border-b border-slate-800 flex items-center px-4 shrink-0 z-20 backdrop-blur-md justify-between shadow-sm">
+                    <header className="h-16 bg-white border-b border-slate-100 flex items-center px-4 shrink-0 z-20 justify-between shadow-sm">
                         <div className="flex items-center">
-                            <KreaNovaLogo className="w-8 h-8 mr-2.5" />
-                            <h1 className="font-bold text-sm tracking-wide text-white">KreaNova AI</h1>
+                            <KreaNovaLogo className="w-8 h-8 mr-2.5 shadow-sm" />
+                            <h1 className="font-bold text-sm tracking-wide text-[#113f28]">KreaNova AI</h1>
                         </div>
-                        <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700 shadow-inner">Mobile Portal</span>
+                        <span className="text-[9px] bg-slate-100 text-slate-500 px-2.5 py-1 rounded-md font-bold tracking-wider">MEMBER AREA</span>
                     </header>
                     
-                    <main className="flex-1 overflow-y-auto p-4 custom-scrollbar relative z-10 bg-[#f8fafc]">
+                    <main className="flex-1 overflow-y-auto p-4 custom-scrollbar relative z-10">
                         {renderContent()}
                     </main>
 
                     {showBannerPopup && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-slate-950/90 backdrop-blur-sm animate-fade-in">
-                            <div className="relative w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-slide-up max-h-[80vh]">
-                                <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-800/50">
-                                    <h3 className="text-white font-bold text-base flex items-center"><i className="fas fa-bullhorn text-yellow-500 mr-2"></i> Papan Pengumuman</h3>
-                                    <button onClick={() => setShowBannerPopup(false)} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-800 hover:bg-slate-700 w-8 h-8 rounded-full flex items-center justify-center">
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-5 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                            <div className="relative w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-slide-up max-h-[80vh]">
+                                <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
+                                    <h3 className="text-[#113f28] font-black text-base flex items-center"><i className="fas fa-bullhorn text-yellow-500 mr-2 text-lg"></i> Pengumuman</h3>
+                                    <button onClick={() => setShowBannerPopup(false)} className="text-slate-400 hover:text-red-500 transition-colors w-8 h-8 rounded-full flex items-center justify-center bg-white shadow-sm border border-slate-100">
                                         <i className="fas fa-times"></i>
                                     </button>
                                 </div>
                                 
-                                <div className="p-6 overflow-y-auto custom-scrollbar text-slate-300 text-sm whitespace-pre-wrap leading-relaxed">
+                                <div className="p-6 overflow-y-auto custom-scrollbar text-slate-700 text-sm whitespace-pre-wrap leading-relaxed font-medium">
                                     {bannerText ? bannerText : "Belum ada pengumuman terbaru dari Admin."}
                                 </div>
                                 
-                                <div className="p-4 border-t border-slate-800 bg-slate-950">
-                                    <button onClick={() => setShowBannerPopup(false)} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-colors shadow-lg shadow-blue-900/20">
+                                <div className="p-4 border-t border-slate-100 bg-slate-50">
+                                    <button onClick={() => setShowBannerPopup(false)} className="w-full bg-[#113f28] hover:bg-[#0a2919] text-white font-bold py-3.5 rounded-2xl transition-colors shadow-lg">
                                         Saya Mengerti (Tutup)
                                     </button>
                                 </div>
@@ -1080,15 +1129,15 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         </div>
                     )}
                     
-                    <nav className="h-16 bg-slate-900/95 border-t border-slate-800 flex justify-around items-center shrink-0 z-20 pb-safe relative shadow-[0_-5px_15px_rgba(0,0,0,0.3)]">
-                        <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'home' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-home text-lg mb-1"></i><span className="text-[9px] font-semibold">Beranda</span></button>
-                        <button onClick={() => setActiveTab('network')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'network' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-sitemap text-lg mb-1"></i><span className="text-[9px] font-semibold">Jaringan</span></button>
+                    <nav className="h-16 bg-white border-t border-slate-100 flex justify-around items-center shrink-0 z-20 pb-safe relative shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+                        <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'home' ? 'text-[#297839]' : 'text-slate-400 hover:text-[#297839]'}`}><i className="fas fa-home text-lg mb-1"></i><span className="text-[9px] font-bold">Beranda</span></button>
+                        <button onClick={() => setActiveTab('network')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'network' ? 'text-[#297839]' : 'text-slate-400 hover:text-[#297839]'}`}><i className="fas fa-sitemap text-lg mb-1"></i><span className="text-[9px] font-bold">Jaringan</span></button>
                         
                         <div className="relative -top-6 flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform z-50" onClick={() => setShowBannerPopup(true)}>
                             <div className="w-[56px] h-[56px] bg-gradient-to-b from-[#d4af37] to-yellow-600 rounded-full p-0.5 shadow-[0_5px_15px_rgba(212,175,55,0.4)] flex items-center justify-center">
-                                <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center overflow-hidden border-[3px] border-slate-900">
+                                <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center overflow-hidden border-[3px] border-white">
                                     <img 
-                                        src="IMG_20260820_224441_2.jpg" 
+                                        src="IMG_20260820_224441.jpg" 
                                         alt="KreaNova Logo" 
                                         className="w-full h-full object-cover relative z-50"
                                         onError={(e) => {
@@ -1100,8 +1149,8 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                             </div>
                         </div>
 
-                        <button onClick={() => setActiveTab('ai')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'ai' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-robot text-lg mb-1"></i><span className="text-[9px] font-semibold">AI Studio</span></button>
-                        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'profile' ? 'text-blue-500' : 'text-slate-500 hover:text-slate-300'}`}><i className="fas fa-user-circle text-lg mb-1"></i><span className="text-[9px] font-semibold">Profil</span></button>
+                        <button onClick={() => setActiveTab('ai')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'ai' ? 'text-[#297839]' : 'text-slate-400 hover:text-[#297839]'}`}><i className="fas fa-robot text-lg mb-1"></i><span className="text-[9px] font-bold">AI Studio</span></button>
+                        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center w-16 transition-colors z-40 ${activeTab === 'profile' ? 'text-[#297839]' : 'text-slate-400 hover:text-[#297839]'}`}><i className="fas fa-user-circle text-lg mb-1"></i><span className="text-[9px] font-bold">Profil</span></button>
                     </nav>
                 </div>
             );
@@ -1144,7 +1193,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 }
             };
 
-            if (loadingApp) return <div className="min-h-screen bg-slate-950 flex justify-center items-center"><KreaNovaLogo className="w-16 h-16 animate-pulse" /></div>;
+            if (loadingApp) return <div className="min-h-screen bg-[#f8fafc] flex justify-center items-center"><KreaNovaLogo className="w-16 h-16 animate-pulse shadow-xl" /></div>;
 
             if (view === 'LOGIN') return <ErrorBoundary><LoginPage onLogin={(u) => { setUser(u); setView('APP'); }} onNavigateRegister={() => setView('REGISTER')} /></ErrorBoundary>;
             if (view === 'REGISTER') return <ErrorBoundary><RegisterPage onRegister={(u) => { setUser(u); setView('APP'); }} onNavigateLogin={() => setView('LOGIN')} /></ErrorBoundary>;
