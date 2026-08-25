@@ -189,10 +189,10 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             };
 
             return (
-                <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative">
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950 z-0"></div>
+                <div className="h-[100dvh] w-full bg-slate-950 overflow-y-auto flex flex-col p-4 relative custom-scrollbar">
+                    <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950 z-0"></div>
                     
-                    <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl relative z-10 overflow-hidden">
+                    <div className="m-auto w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 shrink-0 my-8">
                         <div className="flex justify-center mb-4"><KreaNovaLogo className="w-24 h-24" /></div>
                         <h2 className="text-2xl font-bold text-center text-white mb-1">KreaNova AI</h2>
                         <p className="text-center text-slate-400 text-xs mb-8 uppercase tracking-widest">Portal Member</p>
@@ -221,12 +221,12 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                     </div>
                                 </div>
                             </div>
-                            <button type="submit" disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-6 flex items-center justify-center">
+                            <button type="submit" disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-6 flex items-center justify-center transition-all">
                                 {isLoading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : "Masuk ke Akun"}
                             </button>
                         </form>
                         <div className="mt-6 text-center border-t border-slate-800 pt-5">
-                            <button type="button" onClick={onNavigateRegister} className="text-slate-400 text-sm">Belum punya akun? <span className="text-yellow-500 font-bold">Daftar Sekarang</span></button>
+                            <button type="button" onClick={onNavigateRegister} className="text-slate-400 text-sm hover:text-white transition-colors">Belum punya akun? <span className="text-yellow-500 font-bold">Daftar Sekarang</span></button>
                         </div>
                     </div>
                 </div>
@@ -262,7 +262,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     let currentUplineCode = finalSponsor;
                     let assignedPosition = position; 
 
-                    // ALGORITMA SPILLOVER (LIMPAHAN) CERDAS: Menarik & memfilter data di client agar terhindar dari Error Index Server
                     while (true) {
                         const qSlot = query(collection(db, "users"), where("upline", "==", currentUplineCode));
                         const snapSlot = await getDocs(qSlot);
@@ -275,9 +274,9 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         });
                         
                         if (!childAtPosition) {
-                            break; // Slot Kosong ditemukan!
+                            break; 
                         } else {
-                            currentUplineCode = childAtPosition.referralCode; // Turun ke level berikutnya
+                            currentUplineCode = childAtPosition.referralCode; 
                         }
                     }
 
@@ -322,10 +321,19 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             };
 
             return (
-                <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative">
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950 z-0"></div>
-                    <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl relative z-10 overflow-hidden my-8">
-                        <div className="flex justify-center mb-4"><KreaNovaLogo className="w-20 h-20" /></div>
+                <div className="h-[100dvh] w-full bg-slate-950 overflow-y-auto flex flex-col p-4 relative custom-scrollbar">
+                    <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950 z-0"></div>
+                    
+                    <div className="m-auto w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 shrink-0 my-8">
+                        
+                        {/* TOMBOL KEMBALI KE LOGIN */}
+                        <button type="button" onClick={onNavigateLogin} className="absolute top-5 left-5 text-slate-400 hover:text-white transition-colors group flex items-center gap-2 z-20">
+                            <div className="w-8 h-8 rounded-full bg-slate-800/80 group-hover:bg-slate-700 flex items-center justify-center border border-slate-700 group-hover:border-slate-500 shadow-md transition-all">
+                                <i className="fas fa-arrow-left text-sm"></i>
+                            </div>
+                        </button>
+
+                        <div className="flex justify-center mb-4 mt-2"><KreaNovaLogo className="w-20 h-20" /></div>
                         <h2 className="text-2xl font-bold text-center text-white mb-1">Daftar Akun</h2>
                         <p className="text-center text-slate-400 text-xs mb-6">Bergabung dengan KreaNova AI</p>
                         
@@ -364,12 +372,12 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                     </button>
                                 </div>
                             </div>
-                            <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-4 flex items-center justify-center">
+                            <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl shadow-lg mt-4 flex items-center justify-center transition-all">
                                 {isLoading ? <i className="fas fa-circle-notch fa-spin text-xl"></i> : "Daftar Sekarang"}
                             </button>
                         </form>
                         <div className="mt-6 text-center border-t border-slate-800 pt-5">
-                            <button type="button" onClick={onNavigateLogin} className="text-slate-400 text-sm">Sudah punya akun? <span className="text-blue-500 font-bold">Masuk</span></button>
+                            <button type="button" onClick={onNavigateLogin} className="text-slate-400 text-sm hover:text-white transition-colors">Sudah punya akun? <span className="text-blue-500 font-bold">Masuk</span></button>
                         </div>
                     </div>
                 </div>
