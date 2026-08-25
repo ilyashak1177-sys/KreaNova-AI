@@ -601,10 +601,30 @@
                 fetchGlobalLinks();
             }, []);
 
-            const handleMenuChange = (index, field, value) => { const updated = [...menus]; updated[index][field] = value; setMenus(updated); };
+            const handleMenuChange = (index, field, value) => { 
+                const updated = [...menus]; 
+                updated[index][field] = value; 
+                setMenus(updated); 
+            };
 
-            const handleSave = async (e) => {
-                e.preventDefault(); setSaving(true);
+            const handleAddSlot = () => {
+                setMenus([...menus, { id: Date.now(), name: `Modul AI ${menus.length + 1}`, url: '' }]);
+                showToast("Slot Modul AI Baru Berhasil Ditambahkan!", "success");
+            };
+
+            const handleRemoveSlot = (index) => {
+                if (menus.length <= 1) {
+                    showToast("Minimal harus tersisa 1 modul AI!", "warning");
+                    return;
+                }
+                const updated = menus.filter((_, i) => i !== index);
+                setMenus(updated);
+                showToast("Slot Modul AI Berhasil Dihapus!", "warning");
+            };
+
+            const handleSave = async (e, isDeploy = false) => {
+                if (e) e.preventDefault(); 
+                setSaving(true);
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
                     await setDoc(doc(db, "settings", "global_links"), {
@@ -613,7 +633,11 @@
                         tripayLink: tripayLink, 
                         updatedAt: new Date().toISOString()
                     });
-                    showToast("Pengaturan Berhasil Disimpan!", "success");
+                    if (isDeploy) {
+                        showToast("Berhasil Di-Deploy Langsung ke Seluruh Member Area!", "success");
+                    } else {
+                        showToast("Pengaturan Berhasil Disimpan!", "success");
+                    }
                 } catch (err) { showToast("Gagal menyimpan: " + err.message, "error"); } 
                 finally { setSaving(false); }
             };
@@ -624,7 +648,7 @@
                         <h2 className="text-xl md:text-2xl font-bold text-white tracking-wide"><i className="fas fa-link text-blue-500 mr-2"></i> Manajemen Tautan & Konten</h2>
                         <p className="text-slate-400 text-xs mt-1">Atur link modul AI Studio, teks pengumuman banner, dan link Tripay.</p>
                     </div>
-                    <form onSubmit={handleSave} className="space-y-6">
+                    <form onSubmit={(e) => handleSave(e, false)} className="space-y-6">
                         <div className="glass-panel p-4 md:p-6 rounded-2xl border-t-4 border-t-yellow-500 space-y-3 shadow-lg">
                             <h3 className="text-xs md:text-sm font-bold text-white uppercase tracking-wider flex items-center"><i className="fas fa-bullhorn text-yellow-500 mr-2"></i> Teks Pengumuman (Banner Pop-up)</h3>
                             <p className="text-[11px] text-slate-400">Teks ini akan dibaca oleh member saat menekan logo di tengah layar bawah.</p>
@@ -643,7 +667,13 @@
                         </div>
 
                         <div className="glass-panel p-4 md:p-6 rounded-2xl border-t-4 border-t-blue-500 space-y-4 shadow-lg">
-                            <h3 className="text-xs md:text-sm font-bold text-white uppercase tracking-wider flex items-center"><i className="fas fa-robot text-blue-500 mr-2"></i> Modul AI Studio (10 Menu)</h3>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <h3 className="text-xs md:text-sm font-bold text-white uppercase tracking-wider flex items-center"><i className="fas fa-robot text-blue-500 mr-2"></i> Modul AI Studio ({menus.length} Menu)</h3>
+                                <button type="button" onClick={handleAddSlot} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-md self-start sm:self-auto">
+                                    <i className="fas fa-plus-circle mr-1.5"></i> Tambah Slot Modul AI
+                                </button>
+                            </div>
+                            
                             <div className="space-y-3">
                                 {menus.map((m, idx) => (
                                     <div key={idx} className="flex flex-col sm:flex-row gap-2 sm:gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800 items-start sm:items-center">
@@ -651,14 +681,25 @@
                                             <span className="w-7 h-7 bg-blue-500/20 text-blue-400 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 mr-3">{idx + 1}</span>
                                             <input type="text" value={m.name} onChange={e => handleMenuChange(idx, 'name', e.target.value)} placeholder="Nama Modul" className="w-full sm:w-48 bg-slate-950 border border-slate-700 text-white px-3 py-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
                                         </div>
-                                        <input type="url" value={m.url || ''} onChange={e => handleMenuChange(idx, 'url', e.target.value)} placeholder="https://..." className="w-full sm:flex-1 bg-slate-950 border border-slate-700 text-white px-3 py-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
+                                        <div className="flex items-center w-full sm:flex-1 gap-2">
+                                            <input type="url" value={m.url || ''} onChange={e => handleMenuChange(idx, 'url', e.target.value)} placeholder="https://..." className="flex-1 bg-slate-950 border border-slate-700 text-white px-3 py-2.5 rounded-lg text-xs outline-none focus:border-blue-500" />
+                                            <button type="button" onClick={() => handleRemoveSlot(idx)} title="Hapus Slot Ini" className="bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 p-2.5 rounded-lg text-xs transition">
+                                                <i className="fas fa-trash"></i>
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
-                        <button type="submit" disabled={saving} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 transition transform hover:-translate-y-0.5">
-                            {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <><i className="fas fa-save mr-2"></i> Simpan Semua Perubahan</>}
-                        </button>
+
+                        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                            <button type="submit" disabled={saving} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 rounded-xl border border-slate-700 shadow-lg transition transform hover:-translate-y-0.5 text-xs md:text-sm">
+                                {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <><i className="fas fa-save mr-2 text-blue-400"></i> Simpan Draf</>}
+                            </button>
+                            <button type="button" onClick={(e) => handleSave(e, true)} disabled={saving} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 transition transform hover:-translate-y-0.5 text-xs md:text-sm">
+                                {saving ? <i className="fas fa-circle-notch fa-spin"></i> : <><i className="fas fa-rocket mr-2"></i> Deploy Langsung ke Member</>}
+                            </button>
+                        </div>
                     </form>
                 </div>
             );
@@ -712,10 +753,86 @@
                 } catch(e) { showToast("Gagal tolak: " + e.message, 'error'); }
             }
 
+            const handleDeleteWD = async (wd) => {
+                if (!window.confirm(`Yakin ingin MENGHAPUS PERMANEN riwayat penarikan milik ${wd.name} (Rp ${wd.amount})?`)) return;
+                try {
+                    const { db, doc, deleteDoc } = window.KreaNovaBackend;
+                    await deleteDoc(doc(db, "withdrawals", wd.id));
+                    showToast(`Riwayat penarikan ${wd.name} berhasil dihapus!`, 'success');
+                } catch (e) {
+                    showToast("Gagal menghapus riwayat WD: " + e.message, 'error');
+                }
+            };
+
             const pendingWD = withdrawals.filter(w => w.status === 'PENDING');
-            
-            // PERBAIKAN: Memisahkan data History (Riwayat) Selesai / Ditolak
             const historyWD = withdrawals.filter(w => w.status !== 'PENDING');
+
+            const handleExportWDCSV = () => {
+                if (historyWD.length === 0) {
+                    showToast("Tidak ada riwayat penarikan untuk diexport!", "warning");
+                    return;
+                }
+                let csv = "ID WD,Waktu Eksekusi,Nama Member,ID Referral,Bank Tujuan,Nomor Rekening,Nominal (Rp),Status\n";
+                historyWD.forEach(w => {
+                    csv += `"${w.id}","${new Date(w.processedAt || w.createdAt).toLocaleString('id-ID')}","${w.name}","${w.referralCode}","${w.bankName}","${w.bankAccount}","${w.amount}","${w.status}"\n`;
+                });
+                
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `Backup_Riwayat_WD_KreaNova_${new Date().toISOString().split('T')[0]}.csv`;
+                link.click();
+                showToast("Berhasil mendownload Backup WD Excel (CSV)!", "success");
+            };
+
+            const handleExportWDHTML = () => {
+                if (historyWD.length === 0) {
+                    showToast("Tidak ada riwayat penarikan untuk diexport!", "warning");
+                    return;
+                }
+                let html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Backup Riwayat WD KreaNova AI</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9; }
+                        h2 { color: #333; text-align: center; }
+                        table { border-collapse: collapse; width: 100%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; font-size: 14px; }
+                        th { background-color: #1e3a8a; color: white; }
+                        tr:nth-child(even) { background-color: #f9f9f9; }
+                        .status-completed { color: #10b981; font-weight: bold; }
+                        .status-rejected { color: #ef4444; font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Riwayat Penarikan Dana (Withdrawal) KreaNova AI<br><small>Diekstrak pada: ${new Date().toLocaleString('id-ID')}</small></h2>
+                    <table>
+                        <tr><th>Waktu</th><th>Nama Member</th><th>ID Referral</th><th>Bank</th><th>No Rekening</th><th>Nominal</th><th>Status</th></tr>
+                `;
+                historyWD.forEach(w => {
+                    const statusClass = w.status === 'COMPLETED' ? 'status-completed' : 'status-rejected';
+                    html += `<tr>
+                        <td>${new Date(w.processedAt || w.createdAt).toLocaleString('id-ID')}</td>
+                        <td>${w.name}</td><td>${w.referralCode}</td>
+                        <td>${w.bankName}</td><td>${w.bankAccount}</td>
+                        <td>${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(w.amount)}</td>
+                        <td class="${statusClass}">${w.status}</td>
+                    </tr>`;
+                });
+                html += `
+                    </table>
+                </body>
+                </html>
+                `;
+                const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `Backup_Riwayat_WD_KreaNova_${new Date().toISOString().split('T')[0]}.html`;
+                link.click();
+                showToast("Berhasil mendownload Backup WD HTML!", "success");
+            };
 
             return (
                 <div className="animate-fade-in space-y-6 pb-10">
@@ -765,11 +882,25 @@
                         )}
                     </div>
 
-                    {/* BAGIAN 2: RIWAYAT WD (BARU) */}
+                    {/* BAGIAN 2: RIWAYAT WD (DILENGKAPI EXPORT & HAPUS) */}
                     <div className="glass-panel p-4 md:p-6 rounded-2xl border-t-4 border-t-blue-500 shadow-xl mt-6">
-                        <h3 className="text-base md:text-lg font-bold text-white mb-4"><i className="fas fa-history text-blue-500 mr-2"></i>Riwayat Penarikan (Selesai/Ditolak)</h3>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                            <div>
+                                <h3 className="text-base md:text-lg font-bold text-white"><i className="fas fa-history text-blue-500 mr-2"></i>Riwayat Penarikan (Selesai/Ditolak)</h3>
+                                <p className="text-slate-400 text-[11px] mt-0.5">Export data ke Excel/HTML sebelum menghapus riwayat dari database.</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={handleExportWDCSV} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-md flex items-center">
+                                    <i className="fas fa-file-excel mr-1.5"></i> Export Excel
+                                </button>
+                                <button onClick={handleExportWDHTML} className="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-md flex items-center">
+                                    <i className="fas fa-file-code mr-1.5"></i> Export HTML
+                                </button>
+                            </div>
+                        </div>
+
                         <div className="overflow-x-auto custom-scrollbar">
-                            <table className="w-full text-left border-collapse min-w-[700px]">
+                            <table className="w-full text-left border-collapse min-w-[750px]">
                                 <thead>
                                     <tr className="bg-slate-900/90 text-slate-400 text-[10px] font-bold uppercase tracking-wider border-b border-slate-800">
                                         <th className="p-3">Waktu Eksekusi</th>
@@ -777,11 +908,12 @@
                                         <th className="p-3">Bank Tujuan</th>
                                         <th className="p-3">Nominal Withdraw</th>
                                         <th className="p-3">Status</th>
+                                        <th className="p-3 text-center">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800/60 text-xs">
                                     {historyWD.length === 0 ? (
-                                        <tr><td colSpan="5" className="p-8 text-center text-slate-500">Belum ada riwayat penarikan.</td></tr>
+                                        <tr><td colSpan="6" className="p-8 text-center text-slate-500">Belum ada riwayat penarikan.</td></tr>
                                     ) : (
                                         historyWD.map((wd) => (
                                             <tr key={wd.id} className="hover:bg-slate-800/40 transition">
@@ -798,6 +930,11 @@
                                                 <td className="p-3">
                                                     {wd.status === 'COMPLETED' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded text-[9px] font-bold">SUKSES</span>}
                                                     {wd.status === 'REJECTED' && <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded text-[9px] font-bold">DITOLAK (REFUND)</span>}
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <button onClick={() => handleDeleteWD(wd)} className="bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center justify-center mx-auto">
+                                                        <i className="fas fa-trash mr-1"></i> Hapus
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))
