@@ -686,7 +686,7 @@
             ]);
             
             const [bannerText, setBannerText] = useState('');
-            const [tripayLink, setTripayLink] = useState('');
+            const [qrisImage, setQrisImage] = useState(''); // State baru untuk QRIS (menggantikan Tripay)
             const [saving, setSaving] = useState(false);
 
             useEffect(() => {
@@ -699,12 +699,50 @@
                             const data = docSnap.data();
                             if (data.mainMenus) setMenus(data.mainMenus);
                             if (data.bannerText !== undefined) setBannerText(data.bannerText);
-                            if (data.tripayLink !== undefined) setTripayLink(data.tripayLink);
+                            if (data.qrisImage !== undefined) setQrisImage(data.qrisImage); // Menarik data QRIS
                         }
                     } catch (e) { console.error("Error fetching global links:", e); }
                 };
                 fetchGlobalLinks();
             }, []);
+
+            // FUNGSI KOMPRESI & CONVERT GAMBAR KE BASE64
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 500; // Dikompres maksimal lebar 500px agar super ringan untuk database
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > MAX_WIDTH) {
+                            height = height * (MAX_WIDTH / width);
+                            width = MAX_WIDTH;
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Isi background putih transparan (untuk PNG berlubang)
+                        ctx.fillStyle = "#ffffff";
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // Konversi ke format JPEG dengan kualitas 80%
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                        setQrisImage(dataUrl);
+                        showToast("Gambar QRIS berhasil dimuat! Jangan lupa klik Simpan Draf.", "success");
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            };
 
             const handleMenuChange = (index, field, value) => { 
                 const updated = [...menus]; 
@@ -735,7 +773,7 @@
                     await setDoc(doc(db, "settings", "global_links"), {
                         mainMenus: menus, 
                         bannerText: bannerText,
-                        tripayLink: tripayLink, 
+                        qrisImage: qrisImage, // Menyimpan gambar QRIS
                         updatedAt: new Date().toISOString()
                     });
                     if (isDeploy) {
@@ -751,7 +789,7 @@
                 <div className="animate-fade-in space-y-6 pb-12">
                     <div>
                         <h2 className="text-xl md:text-2xl font-bold text-white tracking-wide"><i className="fas fa-link text-blue-500 mr-2"></i> Manajemen Tautan & Konten</h2>
-                        <p className="text-slate-400 text-xs mt-1">Atur link modul AI Studio, teks pengumuman banner, dan link Tripay.</p>
+                        <p className="text-slate-400 text-xs mt-1">Atur link modul AI Studio, teks pengumuman banner, dan Barcode QRIS Pembayaran.</p>
                     </div>
                     <form onSubmit={(e) => handleSave(e, false)} className="space-y-6">
                         <div className="glass-panel p-4 md:p-6 rounded-2xl border-t-4 border-t-yellow-500 space-y-3 shadow-lg">
@@ -766,9 +804,34 @@
                             ></textarea>
                         </div>
 
-                        <div className="glass-panel p-4 md:p-6 rounded-2xl border-t-4 border-t-emerald-500 space-y-3 shadow-lg">
-                            <h3 className="text-xs md:text-sm font-bold text-white uppercase tracking-wider flex items-center"><i className="fas fa-credit-card text-emerald-500 mr-2"></i> Tautan Payment Gateway (Tripay)</h3>
-                            <input type="url" value={tripayLink} onChange={e => setTripayLink(e.target.value)} placeholder="https://tripay.co.id/checkout/..." className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl text-xs md:text-sm outline-none focus:border-emerald-500" />
+                        {/* BAGIAN BARU: UPLOAD QRIS */}
+                        <div className="glass-panel p-4 md:p-6 rounded-2xl border-t-4 border-t-emerald-500 space-y-4 shadow-lg">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                <h3 className="text-xs md:text-sm font-bold text-white uppercase tracking-wider flex items-center"><i className="fas fa-qrcode text-emerald-500 mr-2"></i> Barcode QRIS Pembayaran</h3>
+                                {qrisImage && (
+                                    <button type="button" onClick={() => setQrisImage('')} className="text-[10px] bg-red-500/10 text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-500 hover:text-white border border-red-500/30 transition font-bold"><i className="fas fa-trash mr-1"></i>Hapus QRIS</button>
+                                )}
+                            </div>
+                            
+                            <div className="flex flex-col md:flex-row gap-5 items-center bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                                <div className="w-full md:w-1/2">
+                                    <label className="block mb-2 text-xs font-bold text-slate-400">Pilih Gambar Barcode/QRIS (Otomatis Dikompres)</label>
+                                    <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full text-xs text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-500/20 file:text-emerald-400 hover:file:bg-emerald-500 hover:file:text-white transition cursor-pointer outline-none border border-slate-700 rounded-xl bg-slate-950" />
+                                    <p className="text-[10px] text-slate-500 mt-2.5 leading-relaxed"><i className="fas fa-info-circle mr-1"></i> Gambar yang Anda upload akan diperkecil & dioptimalkan secara otomatis oleh sistem agar aman tersimpan di Database.</p>
+                                </div>
+                                <div className="w-full md:w-1/2 flex justify-center md:border-l border-t md:border-t-0 border-slate-700 pt-5 md:pt-0 md:pl-5">
+                                    {qrisImage ? (
+                                        <div className="bg-white p-2 rounded-xl shadow-lg border-2 border-emerald-500">
+                                            <img src={qrisImage} alt="Preview QRIS" className="max-h-40 object-contain rounded-lg" />
+                                        </div>
+                                    ) : (
+                                        <div className="w-32 h-32 border-2 border-dashed border-slate-700 bg-slate-950 rounded-xl flex flex-col items-center justify-center text-slate-500 shadow-inner">
+                                            <i className="fas fa-qrcode text-3xl mb-2 text-slate-600"></i>
+                                            <span className="text-[10px] font-bold text-slate-500">Preview QRIS</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
 
                         <div className="glass-panel p-4 md:p-6 rounded-2xl border-t-4 border-t-blue-500 space-y-4 shadow-lg">
