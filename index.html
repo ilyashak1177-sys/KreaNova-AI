@@ -26,7 +26,6 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        /* PERBAIKAN: Menambahkan onSnapshot agar riwayat WD bisa real-time */
         import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -255,13 +254,13 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 try {
                     const { auth, db, createUserWithEmailAndPassword, doc, setDoc, collection, query, where, getDocs } = window.KreaNovaBackend;
                     
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                    const user = userCredential.user;
-
+                    // 1. CARI POSISI KOSONG TERLEBIH DAHULU SEBELUM MEMBUAT AKUN AUTH
+                    // Ini memperbaiki "Race Condition" yang menyebabkan akun ditendang kembali ke Login saat proses mendaftar.
                     const finalSponsor = (!sponsor || sponsor.trim() === '') ? 'KREANOVA' : sponsor.trim().toUpperCase();
                     let currentUplineCode = finalSponsor;
-                    let assignedPosition = position; 
+                    let assignedPosition = position.toUpperCase(); 
 
+                    // Loop cerdas untuk auto-spillover
                     while (true) {
                         const qSlot = query(collection(db, "users"), where("upline", "==", currentUplineCode));
                         const snapSlot = await getDocs(qSlot);
@@ -274,12 +273,21 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         });
                         
                         if (!childAtPosition) {
-                            break; 
+                            break; // Ketemu slot kosong, hentikan loop
                         } else {
-                            currentUplineCode = childAtPosition.referralCode; 
+                            // Proteksi anti-infinite loop jika terjadi data error di Firebase
+                            if (childAtPosition.referralCode === currentUplineCode) {
+                                throw new Error("Terjadi kerusakan struktur pada upline ini.");
+                            }
+                            currentUplineCode = childAtPosition.referralCode; // Geser ke bawah
                         }
                     }
 
+                    // 2. SETELAH PASTI MENDAPATKAN SLOT KOSONG, BARU KITA BUAT AKUN EMAIL & SANDI
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+
+                    // 3. SIAPKAN DATA DAN SIMPAN KE DATABASE FIRESTORE
                     const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
                     const uniqueCode = Math.floor(Math.random() * 900) + 100;
                     const billAmount = 150000 + uniqueCode;
@@ -308,13 +316,20 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
                     await setDoc(doc(db, "users", user.uid), userData);
                     
+                    // Notifikasi Telegram
                     if (typeof window.sendTelegramNotification === 'function') {
                         window.sendTelegramNotification(userData);
                     }
 
+                    // Arahkan ke Aplikasi Utama
                     onRegister(userData);
+                    
                 } catch (error) {
-                    setErrorMsg("Gagal mendaftar: " + error.message);
+                    if(error.code === 'auth/email-already-in-use') {
+                        setErrorMsg("Email ini sudah pernah terdaftar. Silakan gunakan email lain atau masuk (Login).");
+                    } else {
+                        setErrorMsg("Gagal mendaftar: " + error.message);
+                    }
                 } finally {
                     setIsLoading(false);
                 }
@@ -326,7 +341,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     
                     <div className="m-auto w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 shrink-0 my-8">
                         
-                        {/* TOMBOL KEMBALI KE LOGIN */}
                         <button type="button" onClick={onNavigateLogin} className="absolute top-5 left-5 text-slate-400 hover:text-white transition-colors group flex items-center gap-2 z-20">
                             <div className="w-8 h-8 rounded-full bg-slate-800/80 group-hover:bg-slate-700 flex items-center justify-center border border-slate-700 group-hover:border-slate-500 shadow-md transition-all">
                                 <i className="fas fa-arrow-left text-sm"></i>
@@ -388,7 +402,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const [copied, setCopied] = useState(false);
             const [stats, setStats] = useState({ left: 0, right: 0, total: 0, activeSponsor: 0, activePairs: 0 });
             
-            // State WD Modal
             const [showWdModal, setShowWdModal] = useState(false);
             const [wdAmount, setWdAmount] = useState('');
             const [bankName, setBankName] = useState(user?.bankName || '');
@@ -396,21 +409,17 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const [wdStatus, setWdStatus] = useState({ type: '', text: '' });
             const [isWdSubmitting, setIsWdSubmitting] = useState(false);
             
-            // State Riwayat WD
             const [wdHistory, setWdHistory] = useState([]);
 
-            // PENGUNCIAN LINK PERMANEN
             const baseDomain = "https://krea-nova-ai.vercel.app/";
             const fullLink = `${baseDomain}?ref=${user?.referralCode || ''}`;
             
-            // NASKAH COPYWRITING RAPI UNTUK DIBAGIKAN
             const shareText = `🚀 *KreaNova AI* - Solusi Teknologi Cerdas!\n\nDapatkan akses ke tools AI eksklusif dan bangun sumber penghasilan pasif Anda bersama kami.\n\n✅ Modul AI Lengkap\n✅ Komunitas Solid\n✅ Potensi Income Tanpa Batas\n\nDaftar sekarang melalui link resmi:\n${fullLink}`;
 
             useEffect(() => {
                 let isMounted = true;
                 if (!window.KreaNovaBackend || !user?.referralCode) return;
                 
-                // MENGHITUNG STATISTIK REFERRAL SECARA LANGSUNG
                 const fetchStats = async () => {
                     try {
                         const { db, collection, query, where, getDocs } = window.KreaNovaBackend;
@@ -438,7 +447,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                             setStats({ 
                                 left, right, total: left + right,
                                 activeSponsor: activeTotal,
-                                activePairs: Math.floor(Math.min(activeLeft, activeRight) / 5) // Siklus kelipatan 5
+                                activePairs: Math.floor(Math.min(activeLeft, activeRight) / 5) 
                             });
                         }
                     } catch(e) { console.error("Error fetching live stats:", e); }
@@ -448,7 +457,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 return () => { isMounted = false; };
             }, [user?.referralCode]);
 
-            // MEMANTAU RIWAYAT PENARIKAN (REAL-TIME)
             useEffect(() => {
                 if (!window.KreaNovaBackend || !user?.userId) return;
                 const { db, collection, query, where, onSnapshot } = window.KreaNovaBackend;
@@ -458,7 +466,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                     const unsub = onSnapshot(qWd, (snap) => {
                         const list = [];
                         snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-                        // Urutkan dari yang terbaru
                         list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                         setWdHistory(list);
                     });
@@ -660,7 +667,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         </div>
                     </div>
 
-                    {/* SEGMEN RIWAYAT PENARIKAN (WD) */}
                     <div className="mt-8 mb-4 px-1 flex justify-between items-end">
                         <h3 className="font-extrabold text-[#113f28] text-xl tracking-tight">Riwayat Penarikan</h3>
                     </div>
@@ -694,7 +700,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         )}
                     </div>
 
-                    {/* MODAL TARIK DANA */}
                     {showWdModal && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
                             <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md shadow-2xl relative">
@@ -795,7 +800,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                 e.preventDefault(); setIsSubmitting(true); setRegMsg({ type: '', text: '' });
                 try {
                     const { db, doc, setDoc } = window.KreaNovaBackend;
-                    const newUid = "uid_" + Date.now(); 
+                    const newUid = "mock_uid_" + Date.now(); 
                     const refCode = "KN" + Math.floor(10000 + Math.random() * 90000);
                     const billAmount = 150000 + Math.floor(Math.random() * 900) + 100;
 
@@ -1032,7 +1037,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const [activeTab, setActiveTab] = useState('home');
             const [showBannerPopup, setShowBannerPopup] = useState(false);
             const [bannerText, setBannerText] = useState('');
-            const [qrisImage, setQrisImage] = useState(''); // Menangkap QRIS dari database
+            const [qrisImage, setQrisImage] = useState(''); 
 
             useEffect(() => {
                 const fetchSettings = async () => {
@@ -1042,7 +1047,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                         const docSnap = await getDoc(doc(db, "settings", "global_links"));
                         if (docSnap.exists()) {
                             if (docSnap.data().bannerText !== undefined) setBannerText(docSnap.data().bannerText);
-                            if (docSnap.data().qrisImage) setQrisImage(docSnap.data().qrisImage); // Menarik data QRIS
+                            if (docSnap.data().qrisImage) setQrisImage(docSnap.data().qrisImage); 
                         }
                     } catch (e) { console.error("Gagal memuat pengaturan:", e); }
                 };
@@ -1064,7 +1069,6 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                 <p className="text-3xl font-black text-white">{formatIDR(user?.billAmount)}</p>
                             </div>
                             
-                            {/* TAMPILAN QRIS DI MEMBER AREA */}
                             {qrisImage ? (
                                 <div className="bg-white p-5 rounded-2xl mb-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] border-2 border-emerald-500 relative overflow-hidden animate-slide-up">
                                     <div className="absolute top-0 left-0 w-full bg-emerald-500 py-1.5 text-center shadow-sm">
@@ -1167,7 +1171,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                             <div className="w-[56px] h-[56px] bg-gradient-to-b from-[#d4af37] to-yellow-600 rounded-full p-0.5 shadow-[0_5px_15px_rgba(212,175,55,0.4)] flex items-center justify-center">
                                 <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center overflow-hidden border-[3px] border-white">
                                     <img 
-                                        src="IMG_20260820_224441.jpg" 
+                                        src="IMG_20260820_224441_2.jpg" 
                                         alt="KreaNova Logo" 
                                         className="w-full h-full object-cover relative z-50"
                                         onError={(e) => {
@@ -1195,6 +1199,7 @@ Silakan cek Panel Admin untuk Aktivasi!`;
             const [loadingApp, setLoadingApp] = useState(true);
 
             useEffect(() => {
+                let isMounted = true;
                 const checkAuth = () => {
                     if (window.KreaNovaBackend && window.KreaNovaBackend.auth) {
                         const unsub = window.KreaNovaBackend.auth.onAuthStateChanged(async (firebaseUser) => {
@@ -1203,17 +1208,31 @@ Silakan cek Panel Admin untuk Aktivasi!`;
                                     const userDocRef = window.KreaNovaBackend.doc(window.KreaNovaBackend.db, "users", firebaseUser.uid);
                                     const userDoc = await window.KreaNovaBackend.getDoc(userDocRef);
                                     if(userDoc.exists()) {
-                                        setUser(userDoc.data()); setView('APP');
-                                    } else { window.KreaNovaBackend.signOut(window.KreaNovaBackend.auth); }
+                                        if (isMounted) {
+                                            setUser(userDoc.data()); setView('APP');
+                                        }
+                                    } else { 
+                                        // PENTING: Beri toleransi waktu 2 detik agar proses 'setDoc' dari pendaftaran selesai,
+                                        // Mencegah user baru ditendang keluar oleh sensor keamanan secara prematur.
+                                        setTimeout(async () => {
+                                            const recheckDoc = await window.KreaNovaBackend.getDoc(userDocRef);
+                                            if(!recheckDoc.exists() && isMounted) {
+                                                window.KreaNovaBackend.signOut(window.KreaNovaBackend.auth);
+                                            }
+                                        }, 2000);
+                                    }
                                 } catch (err) { console.error(err); }
                             }
-                            setLoadingApp(false);
+                            if (isMounted) setLoadingApp(false);
                         });
                         return unsub;
                     } else { setTimeout(checkAuth, 500); }
                 };
                 const unsubscribe = checkAuth();
-                return () => { if(typeof unsubscribe === 'function') unsubscribe(); };
+                return () => { 
+                    isMounted = false; 
+                    if(typeof unsubscribe === 'function') unsubscribe(); 
+                };
             }, []);
 
             const handleLogout = async () => {
