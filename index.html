@@ -1091,9 +1091,9 @@ Silakan cek Panel Admin untuk Aktivasi!`;
 
                             <div className="flex flex-col gap-2">
                                 <button onClick={() => {
-                                    // PENTING: Ganti "6281234567890" dengan Nomor WhatsApp Admin Anda.
+                                    // PENTING: Ganti "6281369979710" dengan Nomor WhatsApp Admin Anda.
                                     // Gunakan awalan 62 tanpa tanda plus (+) atau angka 0 di depan.
-                                    const adminWA = "6281234567890"; 
+                                    const adminWA = "6281369979710"; 
                                     const text = encodeURIComponent(`Halo Admin KreaNova,\n\nSaya ingin konfirmasi pembayaran untuk aktivasi akun saya.\n\nNama: *${user?.name}*\nID Referral: *${user?.referralCode}*\nTagihan: *${formatIDR(user?.billAmount)}*\n\nBerikut saya lampirkan bukti transfernya:`);
                                     window.open(`https://wa.me/${adminWA}?text=${text}`, '_blank');
                                 }} className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-bold py-3.5 rounded-xl text-sm shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center transform hover:-translate-y-0.5">
